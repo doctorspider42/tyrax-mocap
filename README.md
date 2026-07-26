@@ -167,6 +167,7 @@ everything that matters:
 modules/tyrax-body/ios/BodySession.swift       the one ARKit session
 modules/tyrax-body/ios/TakeRecorder.swift      the .tmocap writer
 modules/tyrax-body/ios/TyraxBodyPreview.swift  the viewfinder + skeleton overlay
+modules/tyrax-body/ios/VisionPass.swift        face + hand landmarks
 modules/tyrax-body/ios/TyraxBodyModule.swift   the JS-facing module
 modules/tyrax-body/index.js                    the JS face of it
 App.js                                         one screen: viewfinder, record, takes
