@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "expo": "~52.0.0",
+    "//expo-asset": "required by @expo/metro-config; expo does not pull it in and the bundler fails without it",
+    "expo-asset": "~11.0.1",
     "expo-file-system": "~18.0.6",
     "expo-keep-awake": "~14.0.1",
     "expo-sharing": "~13.0.0",
