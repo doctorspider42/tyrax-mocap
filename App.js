@@ -57,6 +57,7 @@ export default function App() {
   const [linkError, setLinkError] = useState('');
   const [sent, setSent] = useState(0);
   const counter = useRef(1);
+  const sentRef = useRef(0);
   const link = useRef(null);
   if (!link.current) link.current = new Link();
 
@@ -109,6 +110,7 @@ export default function App() {
       setLinkError(err || '');
       if (s !== 'connected') {
         Body.setStreaming(false);
+        sentRef.current = 0;
         setSent(0);
       }
     };
@@ -121,9 +123,14 @@ export default function App() {
         if (!l.sentSkeleton) return;
       }
       l.sendFrame(f.ts, base64ToBytes(f.rot), f.hips);
-      setSent((n) => n + 1);
+      sentRef.current += 1;
     });
+    // The counter is shown, not used, so it is read on a timer rather than set
+    // per frame - re-rendering the screen 30 times a second to move a number
+    // competes with the thing the number is counting.
+    const tick = setInterval(() => setSent(sentRef.current), 500);
     return () => {
+      clearInterval(tick);
       sub.remove();
       l.close();
     };
