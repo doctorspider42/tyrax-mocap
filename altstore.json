@@ -11,7 +11,7 @@
       "developerName": "doctorspider42",
       "subtitle": "ARKit body capture into editor takes",
       "localizedDescription": "Record motion capture with an iPhone and put it on a character in the TyraX\nPlayStation 2 editor.\n\nNo suit and no markers: ARKit body tracking solves a 91-joint skeleton from\nthe rear camera, the app writes it into a take file, and the editor retargets\nthat onto its own rig - the same path a Mixamo download takes.\n\nStand the phone up so it sees the whole body, record, then AirDrop the take\nto the machine running the editor.\n\nNeeds an iPhone XS or newer (ARKit body tracking wants an A12 chip).",
-      "iconURL": "https://raw.githubusercontent.com/doctorspider42/tyrax-mocap/main/assets/icon.png",
+      "iconURL": "https://doctorspider42.github.io/tyrax-mocap/icon.png",
       "tintColor": "2B6CB0",
       "screenshots": [],
       "version": "1.0.8",
