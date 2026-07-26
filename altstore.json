@@ -14,13 +14,22 @@
       "iconURL": "https://doctorspider42.github.io/tyrax-mocap/icon.png",
       "tintColor": "2B6CB0",
       "screenshots": [],
-      "version": "1.0.9",
-      "versionDate": "2026-07-26T20:04:22Z",
-      "versionDescription": "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from 0de9730.",
+      "version": "1.0.10",
+      "versionDate": "2026-07-26T21:38:32Z",
+      "versionDescription": "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from 0c532f0.",
       "downloadURL": "https://github.com/doctorspider42/tyrax-mocap/releases/latest/download/TyraXMocap.ipa",
-      "size": 4032168,
+      "size": 4032418,
       "minOSVersion": "15.1",
       "versions": [
+        {
+          "version": "1.0.10",
+          "buildVersion": "11",
+          "date": "2026-07-26T21:38:32Z",
+          "localizedDescription": "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from 0c532f0.",
+          "downloadURL": "https://github.com/doctorspider42/tyrax-mocap/releases/download/v1.0.10/TyraXMocap.ipa",
+          "size": 4032418,
+          "minOSVersion": "15.1"
+        },
         {
           "version": "1.0.9",
           "buildVersion": "10",
