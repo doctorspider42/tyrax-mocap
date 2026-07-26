@@ -17,6 +17,14 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+# One deploy at a time. Two tagged releases in quick succession would otherwise
+# race, and the loser could publish the older manifest last.
+concurrency:
+  group: altstore-pages
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -81,26 +89,6 @@ jobs:
       # not ready, AltStore reports the singularly unhelpful "The data couldn't
       # be read because it isn't in the correct format" - so check, rather than
       # hope, and let CI be the one that waits.
-      - name: Wait until the source really serves this version
-        run: |
-          set -euo pipefail
-          want=$(node -e 'console.log(require("./altstore.json").apps[0].version)')
-          url="https://raw.githubusercontent.com/${{ github.repository }}/main/altstore.json"
-          for attempt in $(seq 1 30); do
-            curl -fsSL -H 'Cache-Control: no-cache' "$url" -o served.json || true
-            got=$(node -e 'try{console.log(require("./served.json").apps[0].version)}catch(e){console.log("unreadable")}')
-            echo "attempt $attempt: serving $got, want $want"
-            if [ "$got" = "$want" ]; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::the source never served $want - a phone would still see the old one"
-          exit 1
-
-      # Every download the manifest advertises, checked against what the
-      # releases API says is actually there. A size that disagrees means the
-      # manifest is describing a build that has since been replaced, which is
-      # exactly what re-pushing a tag does - and a phone handed the wrong length
-      # fails at install with the same unhelpful message.
       - name: Check every advertised download against the real asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,3 +96,62 @@ jobs:
           set -euo pipefail
           gh api repos/${{ github.repository }}/releases --paginate > releases.json
           node scripts/check-source.mjs altstore.json releases.json
+
+      # What AltStore actually reads. The file stays in the repo as the record
+      # of what was published, but the URL a phone points at is this one.
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp altstore.json site/altstore.json
+          cp assets/icon.png site/icon.png
+          # A landing page, because a bare JSON file is a confusing thing to
+          # open in a browser and this URL will be pasted into one.
+          node -e '
+            const a = require("./altstore.json").apps[0];
+            const rows = a.versions.map(v =>
+              `<li><b>${v.version}</b> (build ${v.buildVersion}) — ${new Date(v.date).toISOString().slice(0,10)}</li>`).join("");
+            require("fs").writeFileSync("site/index.html", `<!doctype html>
+            <meta charset="utf-8"><title>TyraX Mocap — AltStore source</title>
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:38rem;margin:3rem auto;padding:0 1rem;color:#222}
+            code{background:#f2f2f4;padding:.15em .4em;border-radius:.3em;word-break:break-all}</style>
+            <h1>TyraX Mocap</h1>
+            <p>${a.subtitle}. Add this URL as a source in AltStore:</p>
+            <p><code>https://doctorspider42.github.io/tyrax-mocap/altstore.json</code></p>
+            <h2>Releases</h2><ul>${rows}</ul>
+            <p><a href="https://github.com/doctorspider42/tyrax-mocap">Source code and instructions</a></p>`);'
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      # Same rule as before, one layer out: green must mean a phone can install
+      # from it, so wait until the page really carries this version.
+      - name: Wait until Pages serves it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          want=$(gh api repos/${{ github.repository }}/contents/altstore.json                  --jq '.content' | base64 -d | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).apps[0].version))')
+          url="https://doctorspider42.github.io/tyrax-mocap/altstore.json"
+          for attempt in $(seq 1 30); do
+            curl -fsSL -H 'Cache-Control: no-cache' "$url" -o served.json || true
+            got=$(node -e 'try{console.log(require("./served.json").apps[0].version)}catch(e){console.log("unreadable")}')
+            echo "attempt $attempt: Pages serves $got, want $want"
+            if [ "$got" = "$want" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::Pages never served $want"
+          exit 1

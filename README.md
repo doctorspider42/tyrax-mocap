@@ -123,8 +123,14 @@ Apple ID.
 Add this URL as a source in AltStore (Browse → Sources → **+**):
 
 ```
-https://raw.githubusercontent.com/doctorspider42/tyrax-mocap/main/altstore.json
+https://doctorspider42.github.io/tyrax-mocap/altstore.json
 ```
+
+(It used to be a `raw.githubusercontent.com` URL. That one still resolves, but
+GitHub does not intend raw for production traffic and rate-limits it - and a
+rate-limited fetch hands AltStore an error page, which it reports as *"the data
+couldn't be read because it isn't in the correct format"*. If you added the old
+URL, remove the source and add this one.)
 
 TyraX Mocap then shows up in AltStore like any other app, and every new release
 appears there as an Update - no download, no share sheet, no cable. The manifest

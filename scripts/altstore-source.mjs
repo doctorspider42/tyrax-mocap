@@ -36,6 +36,9 @@ if (!releasesPath) {
 }
 
 const REPO = 'doctorspider42/tyrax-mocap';
+// Where AltStore actually reads this from. The file is committed to the repo as
+// the record of what was published; the URL a phone points at is this one.
+const SITE = 'https://doctorspider42.github.io/tyrax-mocap';
 const IPA = 'TyraXMocap.ipa';
 const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url)));
 const bundleId = appJson.expo.ios.bundleIdentifier;
@@ -130,7 +133,11 @@ const source = {
       developerName: 'doctorspider42',
       subtitle: 'ARKit body capture into editor takes',
       localizedDescription: description,
-      iconURL: `https://raw.githubusercontent.com/${REPO}/main/assets/icon.png`,
+      // Served from Pages beside the manifest, not from
+      // raw.githubusercontent.com: GitHub does not intend raw for production
+      // traffic and rate-limits it, and a rate-limited fetch hands AltStore an
+      // error page rather than an image.
+      iconURL: `${SITE}/icon.png`,
       tintColor: '2B6CB0',
       screenshots: [],
       // Legacy mirror of the newest entry - older AltStore builds read these
