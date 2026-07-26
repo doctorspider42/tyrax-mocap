@@ -5,6 +5,7 @@
   "description": "TyraX Mocap: record ARKit body tracking on an iPhone into takes the TyraX editor retargets onto generated characters",
   "license": "Apache-2.0",
   "main": "index.js",
+  "//deps": "expo-asset is required by @expo/metro-config, not by app code - the bundler dies without it. A comment key inside dependencies is NOT allowed: npm validates every key there as a package name.",
   "scripts": {
     "start": "expo start --dev-client",
     "prebuild": "expo prebuild -p ios",
@@ -14,7 +15,6 @@
   },
   "dependencies": {
     "expo": "~52.0.0",
-    "//expo-asset": "required by @expo/metro-config; expo does not pull it in and the bundler fails without it",
     "expo-asset": "~11.0.1",
     "expo-file-system": "~18.0.6",
     "expo-keep-awake": "~14.0.1",
