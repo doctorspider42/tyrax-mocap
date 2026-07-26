@@ -79,16 +79,18 @@ covers everything else.
 
 ### Calibrate first
 
-With the link up, two buttons appear. **Calibrate (T-pose)** is the one that
-decides whether any of this is usable: stand in a T-pose facing the phone and
-press it. Every frame is measured against a rest pose, and without calibrating
-that pose is ARKit's neutral skeleton - a catalogue figure - so everything you
-differ from it by becomes a constant error in every frame.
+With the link up, **Calibrate (T-pose)** appears, and it is the one thing that
+decides whether any of this is usable. Every frame is measured against a rest
+pose, and without calibrating that pose is ARKit's neutral skeleton - a
+catalogue figure - so everything you differ from it by becomes a constant error
+in every frame.
 
-**Zero** is the smaller one: this instant becomes the origin, so you end up
-facing the way the character does. Calibrating does that as well.
+The button beside it is the **countdown** (now / 3 / 5 / 10 s), and it is what
+makes this a one-person job: prop the phone up, press, walk into frame, stand in
+a T-pose facing it, and it fires. Pressing again cancels.
 
-They are on the phone because you are the one standing in the pose.
+One button, not two, because there is only ever one thing to do - calibrating
+re-zeroes the origin as well, so a separate Zero was two buttons for one intent.
 
 ### Head and hands
 

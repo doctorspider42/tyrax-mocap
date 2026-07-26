@@ -60,6 +60,8 @@ export default function App() {
   const [linkError, setLinkError] = useState('');
   const [sent, setSent] = useState(0);
   const [typing, setTyping] = useState(false);
+  const [calibDelay, setCalibDelay] = useState(5);
+  const [countdown, setCountdown] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const counter = useRef(1);
   const sentRef = useRef(0);
@@ -156,6 +158,19 @@ export default function App() {
       l.close();
     };
   }, []);
+
+  // The countdown, ticking on its own so the phone can be propped up and left.
+  useEffect(() => {
+    if (countdown <= 0) return undefined;
+    const id = setTimeout(() => {
+      if (countdown === 1) {
+        link.current.sendCommand('calibrate');
+        setNote('Calibrated on this pose.');
+      }
+      setCountdown(countdown - 1);
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [countdown]);
 
   const toggleLink = useCallback(() => {
     const l = link.current;
@@ -408,23 +423,30 @@ export default function App() {
           </Text>
         </Pressable>
       </View>
+      {/* One button, because there is only ever one thing to do: stand in a
+          T-pose and tell the editor that this is the reference. Calibrating
+          re-zeroes the origin anyway, so a separate Zero was two buttons for
+          one intent. The countdown is the whole reason it can be used alone -
+          nobody can press a button and be in a T-pose at the same instant. */}
       {linkState === 'connected' && (
         <View style={styles.linkRow}>
           <Pressable
             onPress={() => {
-              link.current.sendCommand('calibrate');
-              setNote('Calibrated on this pose.');
+              if (countdown > 0) { setCountdown(0); setNote('Cancelled.'); return; }
+              setCountdown(calibDelay);
             }}
             style={({ pressed }) => [styles.cmd, styles.cmdWide, pressed && styles.pressed]}>
-            <Text style={styles.cmdLabel}>Calibrate (T-pose)</Text>
+            <Text style={styles.cmdLabel}>
+              {countdown > 0 ? `Stand in a T-pose... ${countdown}` : 'Calibrate (T-pose)'}
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => {
-              link.current.sendCommand('zero');
-              setNote('Zeroed here.');
+              const next = [0, 3, 5, 10];
+              setCalibDelay(next[(next.indexOf(calibDelay) + 1) % next.length]);
             }}
             style={({ pressed }) => [styles.cmd, pressed && styles.pressed]}>
-            <Text style={styles.cmdLabel}>Zero</Text>
+            <Text style={styles.cmdLabel}>{calibDelay ? `${calibDelay}s` : 'now'}</Text>
           </Pressable>
         </View>
       )}
