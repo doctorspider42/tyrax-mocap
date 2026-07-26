@@ -1,6 +1,6 @@
 {
   "name": "tyrax-mocap",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "description": "TyraX Mocap: record ARKit body tracking on an iPhone into takes the TyraX editor retargets onto generated characters",
   "license": "Apache-2.0",

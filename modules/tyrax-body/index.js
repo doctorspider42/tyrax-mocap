@@ -61,8 +61,9 @@ export function setStreaming(on, hz = 30) {
   if (native) native.setStreaming(!!on, hz);
 }
 
-// listener({ ts, rot, hips }) -> subscription. `rot` is base64 of 4 floats per
-// joint, in the skeleton's order.
+// listener({ ts, rot, hips, root }) -> subscription. `rot` is base64 of 4 floats
+// per joint in the skeleton's order; `hips` is the anchor's position and `root`
+// its rotation - the body's heading, which is not in the skeleton at all.
 export function addFrameListener(listener) {
   return native ? native.addListener('onFrame', listener) : { remove() {} };
 }

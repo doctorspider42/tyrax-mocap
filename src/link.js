@@ -114,10 +114,14 @@ export class Link {
       this.sentSkeleton = true;
   }
 
-  sendFrame(ts, rotBytes, hips) {
+  sendFrame(ts, rotBytes, hips, root) {
     if (!this.connected || !this.sentSkeleton) return;
     const msg = { t: 'body', ts };
     if (hips) msg.h = hips;
+    // The heading. Small enough to ride the JSON, and it has to: the skeleton
+    // does not contain it - ARKit keeps the whole body orientation on the
+    // anchor and leaves the hips joint's own rotation constant.
+    if (root) msg.r = root;
     this.send(msg, rotBytes);
   }
 

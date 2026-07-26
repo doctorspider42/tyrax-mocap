@@ -67,10 +67,16 @@ floats have no business going through it.
 | --- | --- | --- |
 | `hello` | `proto`, `code`, `name`, `model`, `client`, `body: true` | — |
 | `bodyrest` | `joints[]`, `parents[]` | 3 floats position + 4 floats rotation per joint, positions first |
-| `body` | `ts`, optional `h` (hips, 3 floats) | 4 floats rotation per joint |
+| `body` | `ts`, optional `h` (hips position, 3 floats) and `r` (heading, 4 floats) | 4 floats rotation per joint |
 
 `body: true` at hello is how the editor knows this is the mocap app and not
 tyrax-cam; the two share a server and a port.
+
+`r` is the body's **heading**, and it is not optional in practice: ARKit keeps
+the whole body orientation on the anchor and leaves `hips_joint`'s own rotation
+constant - measured, across a take in which the performer turned a full circle,
+it did not change by a single float bit while the anchor swung 177 degrees. A
+frame without `r` is a frame in which the character cannot turn round.
 
 `bodyrest` goes once per connection and the editor drops any `body` that arrives
 before it — without the skeleton there is nothing to say which rotation belongs
@@ -81,6 +87,22 @@ moved onto a body of different proportions.
 That is ~1.5 KB a frame for 91 joints, a quarter of what the file format costs.
 The native side hands each packed frame to JavaScript as base64 (the bridge
 carries no binary) and JavaScript owns the socket — the same split as tyrax-cam.
+
+## What ARKit reports but does not solve
+
+Some joints in a take never move. Over a 277-frame recording, these had **zero**
+variation - not "small", not a float bit:
+
+- both wrists (`left_hand_joint`, `right_hand_joint`)
+- both ankles (`*_foot_joint`) and both toe joints
+- the head **relative to the neck** (`head_joint`); head motion arrives through
+  the `neck_1..4` chain instead, and is slight
+
+They are in every take because ARKit's skeleton has them, and a consumer should
+expect them to follow their parent bone rigidly rather than treat the constant
+value as a tracking failure. The editor measures this per take and says so on
+import, for exactly the reason it is written here: on screen, a source with no
+wrist data is indistinguishable from a broken retarget.
 
 ## Conventions
 

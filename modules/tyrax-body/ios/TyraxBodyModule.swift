@@ -25,8 +25,8 @@ public class TyraxBodyModule: Module {
       BodySession.shared.onStatus = { [weak self] payload in
         self?.sendEvent("onStatus", payload)
       }
-      BodySession.shared.onFrame = { [weak self] ts, rot, hips in
-        self?.sendEvent("onFrame", ["ts": ts, "rot": rot, "hips": hips])
+      BodySession.shared.onFrame = { [weak self] ts, rot, hips, root in
+        self?.sendEvent("onFrame", ["ts": ts, "rot": rot, "hips": hips, "root": root])
       }
     }
 

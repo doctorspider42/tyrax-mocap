@@ -140,7 +140,7 @@ export default function App() {
         l.sendSkeleton(sk, base64ToBytes(sk.rest));
         if (!l.sentSkeleton) return;
       }
-      l.sendFrame(f.ts, base64ToBytes(f.rot), f.hips);
+      l.sendFrame(f.ts, base64ToBytes(f.rot), f.hips, f.root);
       sentRef.current += 1;
     });
     // The counter is shown, not used, so it is read on a timer rather than set

@@ -40,7 +40,7 @@ final class BodySession {
   // packed. JavaScript owns the socket (as in tyrax-cam) but never sees a
   // joint - it forwards an opaque blob, which is what keeps ~1.5 KB a frame
   // off the bridge as anything but base64.
-  var onFrame: ((_ ts: Double, _ rotBase64: String, _ hips: [Float]) -> Void)?
+  var onFrame: ((_ ts: Double, _ rotBase64: String, _ hips: [Float], _ root: [Float]) -> Void)?
   var streaming = false
 
   // Which of ARKit's supported capture formats to run. -1 = whatever ARKit
@@ -148,8 +148,15 @@ final class BodySession {
     for m in skeleton.jointLocalTransforms {
       appendQuat(&data, rotationOf(m))
     }
+    // The anchor is where the body is AND which way it faces. The heading is
+    // NOT in the skeleton: ARKit holds hips_joint's own rotation constant to the
+    // last bit while a performer turns a full circle, so a frame that carries
+    // only the position retargets someone walking a circle as someone marching
+    // on the spot.
     let t = anchor.transform.columns.3
-    onFrame(timestamp - streamStart, data.base64EncodedString(), [t.x, t.y, t.z])
+    let q = rotationOf(anchor.transform)
+    onFrame(timestamp - streamStart, data.base64EncodedString(), [t.x, t.y, t.z],
+            [q.imag.x, q.imag.y, q.imag.z, q.real])
   }
 
   // The skeleton the editor needs once: names, the tree, and the rest pose
