@@ -130,6 +130,16 @@ jobs:
   deploy:
     needs: update
     runs-on: ubuntu-latest
+    # REPO SETTING, not code: the `github-pages` environment is created with a
+    # deployment branch policy of `main` only. This job runs from the TAG that
+    # published the release, so without a `v*` TAG policy beside it the job is
+    # refused at setup - it fails in two seconds having run no steps, which
+    # looks like nothing at all in the UI. Settings > Environments >
+    # github-pages > Deployment branches: main AND the tag pattern v*.
+    #
+    # Worth knowing why it was missed: the deploy was first proved with
+    # workflow_dispatch, which runs from main - the one trigger that is not the
+    # real path.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -193,6 +193,13 @@ npx expo run:ios --device
 
 ## How it is built
 
+> **Forking this?** The AltStore manifest is published to GitHub Pages by CI, and
+> the `github-pages` environment allows deployments from `main` only by default.
+> The release job runs from a **tag**, so add the tag pattern `v*` under
+> *Settings > Environments > github-pages > Deployment branches* or every tagged
+> release will fail its deploy step in two seconds having run nothing.
+
+
 Expo (React Native) for the screen, a small **native Expo module** in Swift for
 everything that matters:
 
