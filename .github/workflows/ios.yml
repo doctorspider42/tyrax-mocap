@@ -15,10 +15,10 @@ on:
     # A macOS runner costs ~9 minutes; a README or manifest edit cannot break the
     # build, so do not spend one on it. (Path filters do not apply to tag pushes,
     # which is what we want - a release must always build.)
-    paths-ignore: ['**.md', 'LICENSE']
+    paths-ignore: ['**.md', 'LICENSE', 'altstore.json']
     tags: ['v*']
   pull_request:
-    paths-ignore: ['**.md', 'LICENSE']
+    paths-ignore: ['**.md', 'LICENSE', 'altstore.json']
   workflow_dispatch:
 
 # A tag build attaches the .ipa to a GitHub Release, which (unlike a workflow
@@ -195,3 +195,14 @@ jobs:
             --notes "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from ${GITHUB_SHA:0:7}." \
             --verify-tag || \
           gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/TyraXMocap.ipa" --clobber
+
+  # Point the AltStore source at the release we just published. Called here
+  # rather than triggered by the release event, because GitHub will not start a
+  # workflow from an event its own token raised.
+  altstore:
+    name: AltStore source
+    needs: ios
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/altstore-source.yml

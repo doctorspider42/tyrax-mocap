@@ -1,0 +1,75 @@
+name: AltStore source
+
+# Keeps altstore.json in step with the newest release, so a phone that has this
+# source added sees the update on its own - no cable, no PC, no Actions login.
+#
+# Separate from ios.yml on purpose: this is a 20-second Linux job reacting to a
+# release, not part of building one.
+
+# NOT triggered by `release: published`. GitHub deliberately refuses to start a
+# workflow from an event raised by GITHUB_TOKEN (its loop guard), and our
+# releases are created by ios.yml using exactly that token - so a release
+# trigger here would simply never fire. ios.yml calls this instead, and
+# workflow_dispatch stays available for repairing a manifest by hand.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main         # this job commits to main, not to the tag
+          # The generator reads each release's app.json via `git show <tag>:` to
+          # learn the version and build number that release actually ships, so
+          # it needs the tags and their history - the default depth-1 clone has
+          # neither and every release would be skipped.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The manifest carries the FULL version history (see the script's header:
+      # AltStore resolves the installed build against it, so a latest-only list
+      # breaks every Update), and the releases API is the authoritative record
+      # of what exists - tags, dates and asset sizes together, in one call.
+      - name: Fetch the release history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/${{ github.repository }}/releases --paginate > releases.json
+          echo "releases with an .ipa:"
+          node -e '
+            const r = require("./releases.json");
+            for (const x of r) {
+              const a = (x.assets||[]).find(a=>a.name==="TyraXMocap.ipa");
+              console.log("  " + x.tag_name + (a ? "  " + a.size + "B" : "  (no ipa)"));
+            }'
+
+      - name: Regenerate altstore.json
+        run: |
+          set -euo pipefail
+          node scripts/altstore-source.mjs releases.json
+          node -e 'JSON.parse(require("fs").readFileSync("altstore.json"))'  # valid JSON
+          cat altstore.json
+
+      - name: Commit it
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- altstore.json; then
+            echo "altstore.json already current - nothing to do"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add altstore.json
+          # ios.yml ignores altstore.json, so this cannot loop - the skip marker
+          # is belt and braces.
+          git commit -m "AltStore source: $(node -e 'console.log(require("./altstore.json").apps[0].version)') [skip ci]"
+          git push

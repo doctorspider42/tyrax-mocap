@@ -1,0 +1,43 @@
+{
+  "name": "TyraX Mocap",
+  "identifier": "io.github.doctorspider42.tyraxmocap.source",
+  "subtitle": "Phone motion capture for the TyraX PS2 editor",
+  "description": "Releases of TyraX Mocap, the body-capture app for the TyraX editor.",
+  "website": "https://github.com/doctorspider42/tyrax-mocap",
+  "apps": [
+    {
+      "name": "TyraX Mocap",
+      "bundleIdentifier": "io.github.doctorspider42.tyraxmocap",
+      "developerName": "doctorspider42",
+      "subtitle": "ARKit body capture into editor takes",
+      "localizedDescription": "Record motion capture with an iPhone and put it on a character in the TyraX\nPlayStation 2 editor.\n\nNo suit and no markers: ARKit body tracking solves a 91-joint skeleton from\nthe rear camera, the app writes it into a take file, and the editor retargets\nthat onto its own rig - the same path a Mixamo download takes.\n\nStand the phone up so it sees the whole body, record, then AirDrop the take\nto the machine running the editor.\n\nNeeds an iPhone XS or newer (ARKit body tracking wants an A12 chip).",
+      "iconURL": "https://raw.githubusercontent.com/doctorspider42/tyrax-mocap/main/assets/icon.png",
+      "tintColor": "2B6CB0",
+      "screenshots": [],
+      "version": "1.0.0",
+      "versionDate": "2026-07-26T00:24:56Z",
+      "versionDescription": "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from d48e586.",
+      "downloadURL": "https://github.com/doctorspider42/tyrax-mocap/releases/latest/download/TyraXMocap.ipa",
+      "size": 3964293,
+      "minOSVersion": "15.1",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "1",
+          "date": "2026-07-26T00:24:56Z",
+          "localizedDescription": "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from d48e586.",
+          "downloadURL": "https://github.com/doctorspider42/tyrax-mocap/releases/download/v1.0.0/TyraXMocap.ipa",
+          "size": 3964293,
+          "minOSVersion": "15.1"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "ARKit body tracking needs the camera to work out how a person moves. No image is recorded, shown or transmitted - only the skeleton."
+        }
+      }
+    }
+  ],
+  "news": []
+}
