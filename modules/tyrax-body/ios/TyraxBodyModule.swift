@@ -19,16 +19,20 @@ public class TyraxBodyModule: Module {
   public func definition() -> ModuleDefinition {
     Name("TyraxBody")
 
-    Events("onStatus")
+    Events("onStatus", "onFrame")
 
     OnStartObserving {
       BodySession.shared.onStatus = { [weak self] payload in
         self?.sendEvent("onStatus", payload)
       }
+      BodySession.shared.onFrame = { [weak self] ts, rot, hips in
+        self?.sendEvent("onFrame", ["ts": ts, "rot": rot, "hips": hips])
+      }
     }
 
     OnStopObserving {
       BodySession.shared.onStatus = nil
+      BodySession.shared.onFrame = nil
     }
 
     // A12 and later (iPhone XS onwards). Anything older can install the app and
@@ -90,6 +94,19 @@ public class TyraxBodyModule: Module {
 
     Function("isRecording") { () -> Bool in
       BodySession.shared.recorder != nil
+    }
+
+    // The skeleton the editor needs once per session - names, the tree and the
+    // rest pose. nil before ARKit has handed over its definition.
+    Function("skeleton") { () -> [String: Any]? in
+      BodySession.shared.skeletonPayload()
+    }
+
+    // While streaming, every kept frame is packed natively and handed to
+    // JavaScript as base64 for the socket. `hz` caps the rate.
+    Function("setStreaming") { (on: Bool, hz: Double) in
+      BodySession.shared.streamInterval = hz > 0 ? 1.0 / hz : 0
+      BodySession.shared.streaming = on
     }
 
     // The live viewfinder. Mounting one attaches it to the session that is

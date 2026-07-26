@@ -27,10 +27,21 @@ final class BodySession {
   private var headlessDelegate: HeadlessDelegate?
   private var lastState = ""
   private var lastStatusAt: TimeInterval = 0
+  // Streaming is capped the same way recording is: ARKit solves at 60 and the
+  // editor resamples anyway, so half of that is plenty and halves the traffic.
+  var streamInterval: Double = 1.0 / 30.0
+  private var lastStreamed: TimeInterval = -1
+  private var streamStart: TimeInterval = -1
   private var sawBodyRecently = false
 
   // Set by the module so status can reach JavaScript.
   var onStatus: (([String: Any]) -> Void)?
+  // Set while the app is streaming: one call per frame with the pose already
+  // packed. JavaScript owns the socket (as in tyrax-cam) but never sees a
+  // joint - it forwards an opaque blob, which is what keeps ~1.5 KB a frame
+  // off the bridge as anything but base64.
+  var onFrame: ((_ ts: Double, _ rotBase64: String, _ hips: [Float]) -> Void)?
+  var streaming = false
 
   // Which of ARKit's supported capture formats to run. -1 = whatever ARKit
   // picks for itself.
@@ -84,6 +95,9 @@ final class BodySession {
 
   func stop() {
     recorder = nil
+    streaming = false
+    lastStreamed = -1
+    streamStart = -1
     session.pause()
     running = false
   }
@@ -120,6 +134,55 @@ final class BodySession {
   func feed(anchor: ARBodyAnchor, timestamp: TimeInterval) {
     sawBodyRecently = true
     recorder?.append(anchor: anchor, timestamp: timestamp)
+    guard streaming, let onFrame = onFrame else { return }
+    // Rotations only. Bone lengths do not change during a take, so the rest
+    // pose the editor already has covers the translations - sending 4 floats a
+    // joint instead of 16 is most of why this fits comfortably in a Wi-Fi
+    // frame at 30 Hz.
+    if streamStart < 0 { streamStart = timestamp }
+    if streamInterval > 0 && lastStreamed >= 0 &&
+       timestamp - lastStreamed < streamInterval { return }
+    lastStreamed = timestamp
+    let skeleton = anchor.skeleton
+    var data = Data(capacity: skeleton.jointLocalTransforms.count * 16)
+    for m in skeleton.jointLocalTransforms {
+      let q = simd_quatf(simd_float3x3(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z),
+                                       SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z),
+                                       SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)))
+      for v in [q.imag.x, q.imag.y, q.imag.z, q.real] {
+        withUnsafeBytes(of: v.bitPattern.littleEndian) { data.append(contentsOf: $0) }
+      }
+    }
+    let t = anchor.transform.columns.3
+    onFrame(timestamp - streamStart, data.base64EncodedString(), [t.x, t.y, t.z])
+  }
+
+  // The skeleton the editor needs once: names, the tree, and the rest pose
+  // (position + rotation per joint) as base64, in the order the frames use.
+  func skeletonPayload() -> [String: Any]? {
+    guard let neutral = ARSkeletonDefinition.defaultBody3D.neutralBodySkeleton3D else { return nil }
+    let def = ARSkeletonDefinition.defaultBody3D
+    var pos = Data(), rot = Data()
+    for m in neutral.jointLocalTransforms {
+      let t = m.columns.3
+      for v in [t.x, t.y, t.z] {
+        withUnsafeBytes(of: v.bitPattern.littleEndian) { pos.append(contentsOf: $0) }
+      }
+      let q = simd_quatf(simd_float3x3(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z),
+                                       SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z),
+                                       SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)))
+      for v in [q.imag.x, q.imag.y, q.imag.z, q.real] {
+        withUnsafeBytes(of: v.bitPattern.littleEndian) { rot.append(contentsOf: $0) }
+      }
+    }
+    // The editor expects position then rotation, one run after the other.
+    var payload = pos
+    payload.append(rot)
+    return [
+      "joints": def.jointNames,
+      "parents": def.parentIndices,
+      "rest": payload.base64EncodedString(),
+    ]
   }
 
   // Status is for a human reading a screen from three metres away: five updates

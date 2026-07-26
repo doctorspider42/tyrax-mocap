@@ -51,6 +51,28 @@ Switching restarts tracking, so it is refused during a recording.
 Takes are `.tmocap` files, about 5.8 KB per frame (a 10-second take is ~1.7 MB).
 The format is one page: [PROTOCOL.md](PROTOCOL.md).
 
+## Live link
+
+You do not have to record blind. Point the phone at somebody, link it to the
+editor, and the generated character copies them **as they move** — the same
+pose pipeline the import uses, just fed a frame at a time.
+
+1. In the editor, *Tools > Phone Camera* > **Start link**. It prints its address
+   and a six-digit code.
+2. Type both into the **LIVE LINK** row in the app and press **Link**.
+3. Open *Tools > Mocap* in the editor and pick the character. It moves.
+
+The phone joins the editor (the editor is the thing with a fixed address and a
+screen), on the same port and with the same handshake as
+[tyrax-cam](https://github.com/doctorspider42/tyrax-cam) — the editor tells the
+two apart by what they send after hello. Rotations only, 30 Hz, ~1.5 KB a frame:
+bone lengths do not change during a take, so the rest pose sent once at connect
+covers everything else.
+
+Streaming and recording are independent. Line the shot up live, then press
+**Record** when the take is worth keeping — the file is written on the phone
+exactly as before.
+
 ## Getting it onto the character
 
 In the editor: *Tools > Character Generator* > **Import clips...** and pick the

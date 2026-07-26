@@ -4,15 +4,20 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View,
+  Alert, FlatList, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text,
+  TextInput, View,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import * as Body from './modules/tyrax-body';
+import { Link } from './src/link';
+import { base64ToBytes } from './src/protocol';
 
 const TAKES_DIR = FileSystem.documentDirectory + 'takes/';
+// Typing an IP on a phone once is fine; typing it every session is not.
+const LINK_FILE = FileSystem.documentDirectory + 'link.json';
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -46,7 +51,14 @@ export default function App() {
   const [formats, setFormats] = useState([]);
   const [formatIndex, setFormatIndex] = useState(-1);
   const [showFormats, setShowFormats] = useState(false);
+  const [address, setAddress] = useState('');
+  const [pairCode, setPairCode] = useState('');
+  const [linkState, setLinkState] = useState('idle');
+  const [linkError, setLinkError] = useState('');
+  const [sent, setSent] = useState(0);
   const counter = useRef(1);
+  const link = useRef(null);
+  if (!link.current) link.current = new Link();
 
   const refreshTakes = useCallback(async () => {
     try {
@@ -74,11 +86,64 @@ export default function App() {
     Body.start();
     setFormats(Body.videoFormats());
     refreshTakes();
+    FileSystem.readAsStringAsync(LINK_FILE)
+      .then((raw) => {
+        const saved = JSON.parse(raw);
+        setAddress(saved.address || '');
+        setPairCode(saved.code || '');
+      })
+      .catch(() => {});
     return () => {
       sub.remove();
       Body.stop();
     };
   }, [supported, refreshTakes]);
+
+  // The pump: every frame the native side packs goes straight out. The skeleton
+  // leads - the editor throws away frames that arrive before it, since there is
+  // nothing to say which rotation belongs to which joint.
+  useEffect(() => {
+    const l = link.current;
+    l.onState = (s, err) => {
+      setLinkState(s);
+      setLinkError(err || '');
+      if (s !== 'connected') {
+        Body.setStreaming(false);
+        setSent(0);
+      }
+    };
+    const sub = Body.addFrameListener((f) => {
+      if (!l.connected) return;
+      if (!l.sentSkeleton) {
+        const sk = Body.skeleton();
+        if (!sk) return;   // ARKit has not handed over its definition yet
+        l.sendSkeleton(sk, base64ToBytes(sk.rest));
+        if (!l.sentSkeleton) return;
+      }
+      l.sendFrame(f.ts, base64ToBytes(f.rot), f.hips);
+      setSent((n) => n + 1);
+    });
+    return () => {
+      sub.remove();
+      l.close();
+    };
+  }, []);
+
+  const toggleLink = useCallback(() => {
+    const l = link.current;
+    if (l.state === 'connecting' || l.connected) {
+      l.close();
+      return;
+    }
+    l.connect(address, pairCode, {
+      name: 'iPhone',
+      model: Platform.constants?.systemName ? `iOS ${Platform.Version}` : '',
+      client: 'TyraX Mocap',
+    });
+    Body.setStreaming(true, 30);
+    FileSystem.writeAsStringAsync(LINK_FILE, JSON.stringify({ address, code: pairCode }))
+      .catch(() => {});
+  }, [address, pairCode]);
 
   const pickFormat = useCallback((index) => {
     // Switching restarts tracking, so refuse mid-take rather than splicing a
@@ -245,6 +310,54 @@ export default function App() {
 
       {!!note && <Text style={styles.note}>{note}</Text>}
 
+      {/* Live link. The editor is the host - it has the fixed address and the
+          screen showing the pairing code - so the phone joins, exactly as the
+          camera app does, and to the same port. Streaming is independent of
+          recording: watch the character move, then hit Record when the take is
+          worth keeping. */}
+      <Text style={styles.section}>LIVE LINK</Text>
+      <View style={styles.linkRow}>
+        <TextInput
+          style={[styles.input, styles.inputWide]}
+          value={address}
+          onChangeText={setAddress}
+          placeholder="editor address"
+          placeholderTextColor="#5b6373"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="numbers-and-punctuation"
+          editable={linkState !== 'connected'}
+        />
+        <TextInput
+          style={styles.input}
+          value={pairCode}
+          onChangeText={setPairCode}
+          placeholder="code"
+          placeholderTextColor="#5b6373"
+          keyboardType="number-pad"
+          maxLength={6}
+          editable={linkState !== 'connected'}
+        />
+        <Pressable
+          onPress={toggleLink}
+          style={({ pressed }) => [
+            styles.linkButton,
+            linkState === 'connected' ? styles.linkOn : styles.linkOff,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.linkLabel}>
+            {linkState === 'connected' ? 'Stop' : linkState === 'connecting' ? '…' : 'Link'}
+          </Text>
+        </Pressable>
+      </View>
+      <Text style={[styles.note, linkState === 'error' && styles.danger]}>
+        {linkState === 'error'
+          ? linkError
+          : linkState === 'connected'
+            ? `streaming · ${sent} frames sent`
+            : 'The editor shows its address and code in Tools ▸ Phone Camera.'}
+      </Text>
+
       <Text style={styles.section}>TAKES</Text>
       <FlatList
         style={styles.list}
@@ -301,6 +414,16 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75 },
   recordLabel: { color: '#fff', fontSize: 19, fontWeight: '700' },
   note: { color: '#9fb4cc', fontSize: 12, marginTop: 10 },
+  linkRow: { flexDirection: 'row', alignItems: 'center' },
+  input: {
+    backgroundColor: '#171a21', borderRadius: 8, color: '#e6eaf2', fontSize: 14,
+    paddingHorizontal: 10, paddingVertical: 9, marginRight: 8, width: 74,
+  },
+  inputWide: { flex: 1, width: undefined },
+  linkButton: { borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  linkOff: { backgroundColor: '#2b6cb0' },
+  linkOn: { backgroundColor: '#b03a2b' },
+  linkLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
   section: { color: '#8b93a1', fontSize: 11, letterSpacing: 1, marginTop: 16, marginBottom: 4 },
   list: { maxHeight: 170 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#1c2029' },

@@ -48,6 +48,25 @@ export function addStatusListener(listener) {
   return native ? native.addListener('onStatus', listener) : { remove() {} };
 }
 
+// The skeleton the editor needs once per session:
+// { joints: string[], parents: number[], rest: base64 } - null until ARKit has
+// handed over its definition.
+export function skeleton() {
+  return native ? native.skeleton() : null;
+}
+
+// Start/stop packing frames for the socket. `hz` caps the rate; the pose is
+// packed natively and arrives as base64 through addFrameListener.
+export function setStreaming(on, hz = 30) {
+  if (native) native.setStreaming(!!on, hz);
+}
+
+// listener({ ts, rot, hips }) -> subscription. `rot` is base64 of 4 floats per
+// joint, in the skeleton's order.
+export function addFrameListener(listener) {
+  return native ? native.addListener('onFrame', listener) : { remove() {} };
+}
+
 // The capture formats ARKit accepts for body tracking:
 // [{ index, width, height, fps, lens, selected }]. There is no front/rear
 // choice - body tracking is rear-camera only - but on a phone with several

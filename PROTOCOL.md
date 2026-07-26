@@ -45,7 +45,42 @@ They are what ARKit reports, and storing them unchanged means the file cannot
 be wrong in a way that is hard to see. It costs about 5.8 KB per frame (91
 joints), so a 10-second take at 30 fps is ~1.7 MB - large for a wire, fine for
 a file you AirDrop. A quaternion-and-translation form would be a quarter of
-that and is the obvious v2 if takes ever stream live.
+that, which is exactly what the live link sends — see below.
+
+## The live wire format
+
+Streaming is a different problem from storage: it happens 30 times a second over
+Wi-Fi, and the receiver already knows the skeleton. So the wire carries **only
+rotations**.
+
+One WebSocket binary message is one frame:
+
+```
+[u32 jsonLen][u32 binLen][jsonLen bytes UTF-8 JSON][binLen bytes raw]
+```
+
+both lengths little-endian. The JSON says what the message is; the bulk rides
+the binary trailer, because the editor's JSON reader collapses `\u` escapes and
+floats have no business going through it.
+
+| message | JSON | trailer |
+| --- | --- | --- |
+| `hello` | `proto`, `code`, `name`, `model`, `client`, `body: true` | — |
+| `bodyrest` | `joints[]`, `parents[]` | 3 floats position + 4 floats rotation per joint, positions first |
+| `body` | `ts`, optional `h` (hips, 3 floats) | 4 floats rotation per joint |
+
+`body: true` at hello is how the editor knows this is the mocap app and not
+tyrax-cam; the two share a server and a port.
+
+`bodyrest` goes once per connection and the editor drops any `body` that arrives
+before it — without the skeleton there is nothing to say which rotation belongs
+to which joint. It is also not optional for correctness: retargeting is a delta
+against the performer's rest pose, so a stream of absolute rotations cannot be
+moved onto a body of different proportions.
+
+That is ~1.5 KB a frame for 91 joints, a quarter of what the file format costs.
+The native side hands each packed frame to JavaScript as base64 (the bridge
+carries no binary) and JavaScript owns the socket — the same split as tyrax-cam.
 
 ## Conventions
 
