@@ -1,0 +1,96 @@
+# TyraX Mocap
+
+Record somebody moving with an iPhone, and put that motion on a character in
+the [TyraX](https://github.com/doctorspider42/tyra-editor) PlayStation 2 editor.
+
+No suit, no markers, no cloud service: ARKit's body tracking solves a 91-joint
+skeleton from the rear camera, this app writes it into a take file, and the
+editor retargets that onto its own 23-bone rig — the same retarget path a
+Mixamo download goes through.
+
+Sibling app: [tyrax-cam](https://github.com/doctorspider42/tyrax-cam) turns the
+phone into a camera viewfinder. Same build story, same sideload story.
+
+## What you need
+
+- **iPhone XS or newer** (an A12 chip). ARKit body tracking does not exist
+  below that, and the app says so on launch rather than failing later.
+- Room to stand back: the **whole body** has to be in frame, so about three
+  metres, and enough light for the camera to see detail.
+- A way to sideload — see below.
+
+## Recording
+
+1. Stand the phone up (a tripod, a mug, anything) so it can see the performer
+   head to foot.
+2. Wait for the status pill to read **normal** and for "body in frame".
+3. **Record**, perform, **Stop**. The take appears in the list.
+4. **Send** opens the iOS share sheet — AirDrop it to the machine running the
+   editor, or drop it in any cloud folder.
+
+Takes are `.tmocap` files, about 5.8 KB per frame (a 10-second take is ~1.7 MB).
+The format is one page: [PROTOCOL.md](PROTOCOL.md).
+
+## Getting it onto the character
+
+In the editor: *Tools > Character Generator* > **Import clips...** and pick the
+`.tmocap`. It lands as a clip on the generated character, resampled and cut
+down to the bones that rig actually has.
+
+The honest part: this is monocular pose estimation from one camera. Gross body
+motion reads well; feet slide, depth wobbles, and self-occlusion (an arm behind
+the back) breaks the solve. For a 1500-triangle character seen from five metres
+on a PlayStation 2 that is the right fidelity tier. For a close-up cutscene it
+is not — that is what hand-keyed animation is still for.
+
+## Installing it
+
+The CI builds an **unsigned** `.ipa`: there are no Apple credentials in this
+repo, and there is no App Store listing. You sign it yourself with your own
+Apple ID.
+
+**AltStore (on the phone, no computer after setup)**
+
+1. Set up [AltStore](https://altstore.io/) once.
+2. Download the `.ipa` from the [latest release](../../releases/latest).
+3. Open it in AltStore → it signs with your Apple ID and installs.
+
+A free Apple ID means the app stops working after **7 days** and has to be
+refreshed — AltStore does that by itself while it can reach your computer. A
+paid developer account gets a year.
+
+**Sideloadly (from a computer)** — plug the phone in, drop the `.ipa` on
+[Sideloadly](https://sideloadly.io/), sign in with your Apple ID, install.
+
+**From source** — needs a Mac with Xcode:
+
+```
+npm install
+npx expo prebuild -p ios
+npx expo run:ios --device
+```
+
+## How it is built
+
+Expo (React Native) for the screen, a small **native Expo module** in Swift for
+everything that matters:
+
+```
+modules/tyrax-body/ios/TyraxBodyModule.swift   ARKit session, take recorder
+modules/tyrax-body/index.js                    the JS face of it
+App.js                                         one screen: status, record, takes
+```
+
+The recording is buffered and written **in Swift**, not in JavaScript. A take
+is 91 joints × a 4×4 matrix per frame; pushing that across the JS bridge 30
+times a second would cost more than the tracking does. JavaScript gets a
+throttled status line and nothing else.
+
+`.github/workflows/ios.yml` builds it: a fast Linux job that bundles the JS
+(catching the ordinary mistakes without a macOS runner) and then a macOS job
+that runs `expo prebuild` and `xcodebuild archive` unsigned. A `v*` tag also
+publishes the `.ipa` as a release asset.
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE).

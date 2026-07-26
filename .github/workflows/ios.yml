@@ -1,0 +1,197 @@
+name: iOS build
+
+# Two jobs on purpose. `bundle` runs on Linux in about a minute and catches the
+# ordinary mistakes (a syntax error, a bad import, a missing dependency) without
+# waiting for a macOS runner. `ios` then does the real thing: generate the native
+# project and compile it, Swift ARKit module included.
+#
+# The build is UNSIGNED - there are no Apple credentials here, and this is a
+# sideload-only app. The artifact is an unsigned .ipa that AltStore / Sideloadly
+# can sign with a free Apple ID; see the README.
+
+on:
+  push:
+    branches: [main]
+    # A macOS runner costs ~9 minutes; a README or manifest edit cannot break the
+    # build, so do not spend one on it. (Path filters do not apply to tag pushes,
+    # which is what we want - a release must always build.)
+    paths-ignore: ['**.md', 'LICENSE']
+    tags: ['v*']
+  pull_request:
+    paths-ignore: ['**.md', 'LICENSE']
+  workflow_dispatch:
+
+# A tag build attaches the .ipa to a GitHub Release, which (unlike a workflow
+# artifact) needs no login to download - so the phone can fetch it directly.
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: JS bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      # Metro has to resolve and transform every module the app imports, so this
+      # fails on a syntax error, a bad import path or a dependency that is not
+      # actually declared - none of which needs a Mac to find.
+      - name: Bundle for iOS
+        run: npx expo export --platform ios --output-dir dist
+      - name: Check the Expo config resolves
+        run: npx expo config --type public > /dev/null
+
+      # The local body-tracking module is what makes this app more than a list
+      # of files, and autolinking failing to pick it up is INVISIBLE: the app
+      # still builds and still runs, it just silently records nothing. Assert it.
+      # (Note the platform is "apple", not "ios" - an `-p ios` query filters out
+      # every apple-only module, this one included.)
+      - name: Assert the body module is autolinked
+        run: |
+          npx expo-modules-autolinking search -p apple --json > modules.json
+          node -e '
+            const m = require("./modules.json");
+            const name = "tyrax-body";
+            if (!m[name]) {
+              console.error("FAIL: " + name + " is not autolinked. Found: " + Object.keys(m).join(", "));
+              process.exit(1);
+            }
+            const cfg = m[name].config ?? {};
+            const mods = (cfg.apple?.modules) ?? (cfg.rawConfig?.apple?.modules) ?? [];
+            if (!mods.includes("TyraxBodyModule")) {
+              console.error("FAIL: " + name + " links no TyraxBodyModule (got " + JSON.stringify(mods) + ")");
+              process.exit(1);
+            }
+            console.log("ok: " + name + " -> " + mods.join(", "));
+          '
+
+  ios:
+    name: Unsigned iOS build
+    runs-on: macos-15
+    needs: bundle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+
+      # A tag whose version does not match app.json ships an app that reports
+      # the wrong version to iOS, so AltStore compares against a stale number
+      # and offers the same "update" forever.
+      - name: Tag must match app.json's version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          WANT="${GITHUB_REF_NAME#v}"
+          HAVE=$(node -e 'console.log(require("./app.json").expo.version)')
+          echo "tag says $WANT, app.json says $HAVE"
+          if [ "$WANT" != "$HAVE" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match app.json version $HAVE - bump app.json (and ios.buildNumber) before tagging"
+            exit 1
+          fi
+
+      # Generates ios/ (never checked in) and runs pod install. This is also
+      # what validates app.json and the local module's expo-module.config.json:
+      # a bad key here fails now rather than in Xcode.
+      - name: Expo prebuild
+        run: npx expo prebuild --platform ios
+        env:
+          EXPO_NO_TELEMETRY: '1'
+
+      # The names come from app.json via prebuild, so derive them instead of
+      # hardcoding: renaming the app must not silently break CI.
+      #
+      # The app's scheme is named after the generated .xcodeproj. Do NOT just
+      # take the workspace's first scheme - CocoaPods adds one per pod and
+      # "boost" sorts ahead of the app, so archiving it "succeeds" while
+      # producing an archive with no .app inside.
+      - name: Find the Xcode workspace and scheme
+        id: xc
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(basename "$(ls -d ios/*.xcodeproj | head -1)" .xcodeproj)
+          if ! xcodebuild -list -json -workspace "$WORKSPACE" \
+               | jq -e --arg s "$SCHEME" '.workspace.schemes | index($s)' > /dev/null; then
+            echo "::error::scheme '$SCHEME' is not in $WORKSPACE"
+            xcodebuild -list -workspace "$WORKSPACE"
+            exit 1
+          fi
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+          echo "Building scheme '$SCHEME' from '$WORKSPACE'"
+
+      # Device SDK, not the simulator: ARKit body tracking is the whole point of
+      # the native module and does not exist on the simulator.
+      - name: Archive (unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -workspace "${{ steps.xc.outputs.workspace }}" \
+            -scheme "${{ steps.xc.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/${{ steps.xc.outputs.scheme }}.xcarchive" \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            EXPANDED_CODE_SIGN_IDENTITY=""
+
+      # An .ipa is a zip with the .app inside a Payload/ directory. Doing it by
+      # hand (rather than -exportArchive) is what keeps this signing-free.
+      - name: Package an unsigned .ipa
+        env:
+          SCHEME: ${{ steps.xc.outputs.scheme }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="$RUNNER_TEMP/$SCHEME.xcarchive"
+          APPS="$ARCHIVE/Products/Applications"
+          # An archive without an app means the wrong scheme was built - say so
+          # rather than letting a glob failure explain it.
+          if [ ! -d "$APPS" ] || [ -z "$(ls -A "$APPS" 2>/dev/null)" ]; then
+            echo "::error::no application in $ARCHIVE - was scheme '$SCHEME' really the app?"
+            find "$ARCHIVE" -maxdepth 3 -print
+            exit 1
+          fi
+          APP=$(ls -d "$APPS/"*.app | head -1)
+          echo "packaging $APP"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$RUNNER_TEMP/$SCHEME-unsigned.ipa" Payload
+          ls -lh "$RUNNER_TEMP/$SCHEME-unsigned.ipa"
+          echo "ipa=$RUNNER_TEMP/$SCHEME-unsigned.ipa" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TyraXMocap-unsigned-ipa
+          path: ${{ env.ipa }}
+          if-no-files-found: error
+          retention-days: 30
+
+      # Tag build: publish the .ipa as a Release asset. A workflow artifact can
+      # only be downloaded by a logged-in user through the Actions UI, which a
+      # phone cannot practically do; a Release asset is a plain public URL.
+      - name: Publish the Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp "$ipa" "$RUNNER_TEMP/TyraXMocap.ipa"
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/TyraXMocap.ipa" \
+            --title "TyraX Mocap $GITHUB_REF_NAME" \
+            --notes "Unsigned build - sign it with AltStore or Sideloadly using your own Apple ID (see the README). Built from ${GITHUB_SHA:0:7}." \
+            --verify-tag || \
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/TyraXMocap.ipa" --clobber

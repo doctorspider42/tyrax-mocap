@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "TyraX Mocap",
+    "slug": "tyrax-mocap",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "io.github.doctorspider42.tyraxmocap",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "ARKit body tracking needs the camera to work out how a person moves. The picture is never recorded, shown or sent anywhere - only the skeleton's joint transforms are written into a take file on this device.",
+        "UIRequiredDeviceCapabilities": ["arkit"],
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
+      }
+    }
+  }
+}
