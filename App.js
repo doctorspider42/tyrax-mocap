@@ -4,8 +4,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform,
-  Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, Pressable,
+  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -60,6 +60,7 @@ export default function App() {
   const [linkError, setLinkError] = useState('');
   const [sent, setSent] = useState(0);
   const [typing, setTyping] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const counter = useRef(1);
   const sentRef = useRef(0);
   const link = useRef(null);
@@ -96,8 +97,9 @@ export default function App() {
         const saved = JSON.parse(raw);
         setAddress(saved.address || '');
         setPairCode(saved.code || '');
+        if (!saved.address) setShowSettings(true);
       })
-      .catch(() => {});
+      .catch(() => setShowSettings(true));
     return () => {
       sub.remove();
       Body.stop();
@@ -266,9 +268,19 @@ export default function App() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <Text style={styles.title}>TyraX Mocap</Text>
+        {/* With the panel shut these two pills are the whole state: is ARKit
+            tracking, and is the editor getting frames. */}
+        {linkState !== 'idle' && (
+          <Text style={[styles.pill, linkState === 'connected' ? styles.pillOk : styles.pillWarn]}>
+            {linkState === 'connected' ? 'live' : linkState}
+          </Text>
+        )}
         <Text style={[styles.pill, trackingOk ? styles.pillOk : styles.pillWarn]}>
           {status.tracking}
         </Text>
+        <Pressable onPress={() => setShowSettings((v) => !v)} hitSlop={10} style={styles.gear}>
+          <Text style={[styles.gearGlyph, showSettings && styles.gearOn]}>⚙</Text>
+        </Pressable>
       </View>
 
       <View style={styles.stage}>
@@ -299,6 +311,24 @@ export default function App() {
         </View>
       </View>
 
+      <Pressable
+        onPress={toggleRecord}
+        style={({ pressed }) => [
+          styles.record,
+          recording ? styles.recordOn : styles.recordOff,
+          pressed && styles.pressed,
+        ]}>
+        <Text style={styles.recordLabel}>{recording ? 'Stop' : 'Record'}</Text>
+      </Pressable>
+
+      {!!note && <Text style={styles.note}>{note}</Text>}
+
+      {/* Everything below is settings, and settings are not what you look at
+          while framing a person - they used to eat half the viewfinder. The
+          panel opens by itself the first time, when there is no saved address
+          and the app would otherwise look like it has no link at all. */}
+      {showSettings && (
+      <ScrollView style={styles.panel} keyboardShouldPersistTaps="handled">
       {/* Lens picker. Body tracking is rear-camera only - ARKit has no front
           option - so what this really chooses is which rear lens and at what
           rate, and the wide one is how you film in a small room. */}
@@ -326,18 +356,6 @@ export default function App() {
           ))}
         </View>
       )}
-
-      <Pressable
-        onPress={toggleRecord}
-        style={({ pressed }) => [
-          styles.record,
-          recording ? styles.recordOn : styles.recordOff,
-          pressed && styles.pressed,
-        ]}>
-        <Text style={styles.recordLabel}>{recording ? 'Stop' : 'Record'}</Text>
-      </Pressable>
-
-      {!!note && <Text style={styles.note}>{note}</Text>}
 
       {/* Live link. The editor is the host - it has the fixed address and the
           screen showing the pairing code - so the phone joins, exactly as the
@@ -391,27 +409,26 @@ export default function App() {
             : 'The editor shows its address and code in Tools ▸ Phone Camera.'}
       </Text>
 
+      {/* Plain rows, not a FlatList: a virtualized list inside a ScrollView is
+          an error, and a phone holds a handful of takes, not thousands. */}
       {!typing && <Text style={styles.section}>TAKES</Text>}
-      {!typing && <FlatList
-        style={styles.list}
-        data={takes}
-        keyExtractor={(t) => t.name}
-        ListEmptyComponent={<Text style={styles.hint}>Nothing recorded yet.</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowName}>{item.name}</Text>
-              <Text style={styles.rowMeta}>{formatBytes(item.size)}</Text>
-            </View>
-            <Pressable onPress={() => share(item)} style={styles.action}>
-              <Text style={styles.actionLabel}>Send</Text>
-            </Pressable>
-            <Pressable onPress={() => remove(item)} style={styles.action}>
-              <Text style={[styles.actionLabel, styles.danger]}>Delete</Text>
-            </Pressable>
+      {!typing && !takes.length && <Text style={styles.hint}>Nothing recorded yet.</Text>}
+      {!typing && takes.map((item) => (
+        <View key={item.name} style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.rowName}>{item.name}</Text>
+            <Text style={styles.rowMeta}>{formatBytes(item.size)}</Text>
           </View>
-        )}
-      />}
+          <Pressable onPress={() => share(item)} style={styles.action}>
+            <Text style={styles.actionLabel}>Send</Text>
+          </Pressable>
+          <Pressable onPress={() => remove(item)} style={styles.action}>
+            <Text style={[styles.actionLabel, styles.danger]}>Delete</Text>
+          </Pressable>
+        </View>
+      ))}
+      </ScrollView>
+      )}
       </KeyboardAvoidingView>
       <InputAccessoryView nativeID={KEYBOARD_DONE}>
         <View style={styles.accessory}>
@@ -428,8 +445,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#101216', paddingHorizontal: 18 },
   centered: { flexGrow: 1, justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
-  title: { color: '#f2f4f8', fontSize: 24, fontWeight: '700' },
-  pill: { overflow: 'hidden', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, fontSize: 12 },
+  title: { color: '#f2f4f8', fontSize: 24, fontWeight: '700', flex: 1 },
+  pill: { overflow: 'hidden', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, fontSize: 12, marginLeft: 6 },
   pillOk: { backgroundColor: '#1d3b26', color: '#7fe0a0' },
   pillWarn: { backgroundColor: '#3b331d', color: '#e8cf7f' },
   // The viewfinder gets the room: framing a whole person is the hard part.
@@ -456,6 +473,12 @@ const styles = StyleSheet.create({
   recordLabel: { color: '#fff', fontSize: 19, fontWeight: '700' },
   note: { color: '#9fb4cc', fontSize: 12, marginTop: 10 },
   flex: { flex: 1 },
+  gear: { paddingLeft: 10, paddingVertical: 2 },
+  gearGlyph: { color: '#8b93a1', fontSize: 22 },
+  gearOn: { color: '#7fb2e0' },
+  // Capped so an open panel never takes the viewfinder's half of the screen -
+  // which is the whole reason it is a panel.
+  panel: { maxHeight: 300, marginTop: 6 },
   accessory: {
     backgroundColor: '#20242d', borderTopWidth: 1, borderTopColor: '#2c313c',
     alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 9,

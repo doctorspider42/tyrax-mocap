@@ -33,6 +33,12 @@ body *before* pressing record rather than after.
 4. **Send** opens the iOS share sheet — AirDrop it to the machine running the
    editor, or drop it in any cloud folder.
 
+Everything that is not the viewfinder lives behind the **gear** in the corner -
+lens, live link, recorded takes. Framing a person is what the screen is for, and
+the settings used to take half of it. The two pills next to the gear are the
+whole state with the panel shut: whether ARKit is tracking, and whether the
+editor is getting frames.
+
 The overlay draws the joints **the editor will actually use**, not all 91 ARKit
 reports: fingers and face are noise at this distance, and this way what you see
 on screen is exactly what gets retargeted.
@@ -59,7 +65,9 @@ pose pipeline the import uses, just fed a frame at a time.
 
 1. In the editor, *Tools > Phone Camera* > **Start link**. It prints its address
    and a six-digit code.
-2. Type both into the **LIVE LINK** row in the app and press **Link**.
+2. Open the app's **gear**, type both into the **LIVE LINK** row and press
+   **Link**. (The panel opens by itself the first time, when there is nothing
+   saved yet.)
 3. Open *Tools > Mocap* in the editor and pick the character. It moves.
 
 The phone joins the editor (the editor is the thing with a fixed address and a
