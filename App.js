@@ -408,6 +408,26 @@ export default function App() {
           </Text>
         </Pressable>
       </View>
+      {linkState === 'connected' && (
+        <View style={styles.linkRow}>
+          <Pressable
+            onPress={() => {
+              link.current.sendCommand('calibrate');
+              setNote('Calibrated on this pose.');
+            }}
+            style={({ pressed }) => [styles.cmd, styles.cmdWide, pressed && styles.pressed]}>
+            <Text style={styles.cmdLabel}>Calibrate (T-pose)</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              link.current.sendCommand('zero');
+              setNote('Zeroed here.');
+            }}
+            style={({ pressed }) => [styles.cmd, pressed && styles.pressed]}>
+            <Text style={styles.cmdLabel}>Zero</Text>
+          </Pressable>
+        </View>
+      )}
       <Text style={[styles.note, linkState === 'error' && styles.danger]}>
         {linkState === 'error'
           ? linkError
@@ -492,6 +512,12 @@ const styles = StyleSheet.create({
   },
   accessoryDone: { color: '#7fb2e0', fontSize: 16, fontWeight: '700' },
   linkRow: { flexDirection: 'row', alignItems: 'center' },
+  cmd: {
+    backgroundColor: '#2b3a4d', borderRadius: 8, paddingVertical: 11,
+    alignItems: 'center', marginTop: 8, marginRight: 8, flex: 1,
+  },
+  cmdWide: { flex: 2 },
+  cmdLabel: { color: '#cfe0f2', fontSize: 14, fontWeight: '600' },
   input: {
     backgroundColor: '#171a21', borderRadius: 8, color: '#e6eaf2', fontSize: 14,
     paddingHorizontal: 10, paddingVertical: 9, marginRight: 8, width: 74,

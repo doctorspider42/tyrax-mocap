@@ -130,6 +130,13 @@ export class Link {
     this.send(msg, rotBytes);
   }
 
+  // A button the performer presses themselves. They are the one standing in the
+  // T-pose and the one who knows when they are ready - running back to a
+  // keyboard mid-pose defeats the point of calibrating on that pose.
+  sendCommand(cmd) {
+    return this.send({ t: 'cmd', cmd });
+  }
+
   setState(s) {
     this.state = s;
     if (s !== 'error') this.error = '';

@@ -68,6 +68,7 @@ floats have no business going through it.
 | `hello` | `proto`, `code`, `name`, `model`, `client`, `body: true` | — |
 | `bodyrest` | `joints[]`, `parents[]` | 3 floats position + 4 floats rotation per joint, positions first |
 | `body` | `ts`, optional `h` (hips position, 3 floats), `r` (heading, 4 floats) and the Vision keys below | 4 floats rotation per joint |
+| `cmd` | `cmd`: `calibrate` or `zero` | — |
 
 `body: true` at hello is how the editor knows this is the mocap app and not
 tyrax-cam; the two share a server and a port.
@@ -87,6 +88,24 @@ moved onto a body of different proportions.
 That is ~1.5 KB a frame for 91 joints, a quarter of what the file format costs.
 The native side hands each packed frame to JavaScript as base64 (the bridge
 carries no binary) and JavaScript owns the socket — the same split as tyrax-cam.
+
+### Calibrate and zero
+
+`{"t":"cmd","cmd":"calibrate"}` tells the editor to take the performer's
+CURRENT pose as the rest pose every later frame is a delta from. Stand in a
+T-pose facing the camera and send it.
+
+This matters more than it sounds. Retargeting measures each frame against a rest
+pose, and without calibrating that pose is ARKit's neutral skeleton - a nominal
+figure out of a catalogue. Everything a real person differs from it by, in
+proportions and in stance, becomes a constant error in **every frame**.
+
+`zero` is the smaller sibling: forget where they were and which way they faced,
+this instant becomes the origin. Calibrating does it too.
+
+Both are on the phone because the performer is the one in the T-pose and the one
+who knows when they are ready; walking back to a keyboard mid-pose defeats the
+point of calibrating on that pose.
 
 ### The Vision keys
 

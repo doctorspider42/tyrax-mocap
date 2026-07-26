@@ -77,6 +77,19 @@ two apart by what they send after hello. Rotations only, 30 Hz, ~1.5 KB a frame:
 bone lengths do not change during a take, so the rest pose sent once at connect
 covers everything else.
 
+### Calibrate first
+
+With the link up, two buttons appear. **Calibrate (T-pose)** is the one that
+decides whether any of this is usable: stand in a T-pose facing the phone and
+press it. Every frame is measured against a rest pose, and without calibrating
+that pose is ARKit's neutral skeleton - a catalogue figure - so everything you
+differ from it by becomes a constant error in every frame.
+
+**Zero** is the smaller one: this instant becomes the origin, so you end up
+facing the way the character does. Calibrating does that as well.
+
+They are on the phone because you are the one standing in the pose.
+
 ### Head and hands
 
 ARKit's body tracker reports a head joint and two wrists and **solves none of
