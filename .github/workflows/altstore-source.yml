@@ -73,3 +73,38 @@ jobs:
           # is belt and braces.
           git commit -m "AltStore source: $(node -e 'console.log(require("./altstore.json").apps[0].version)') [skip ci]"
           git push
+
+      # A green build used to mean "the manifest was pushed", which is not the
+      # same thing as "a phone can install from it". Between the two sit a CDN
+      # that caches this file for five minutes and release assets that have to
+      # be reachable at exactly the size the manifest promises. When either is
+      # not ready, AltStore reports the singularly unhelpful "The data couldn't
+      # be read because it isn't in the correct format" - so check, rather than
+      # hope, and let CI be the one that waits.
+      - name: Wait until the source really serves this version
+        run: |
+          set -euo pipefail
+          want=$(node -e 'console.log(require("./altstore.json").apps[0].version)')
+          url="https://raw.githubusercontent.com/${{ github.repository }}/main/altstore.json"
+          for attempt in $(seq 1 30); do
+            curl -fsSL -H 'Cache-Control: no-cache' "$url" -o served.json || true
+            got=$(node -e 'try{console.log(require("./served.json").apps[0].version)}catch(e){console.log("unreadable")}')
+            echo "attempt $attempt: serving $got, want $want"
+            if [ "$got" = "$want" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::the source never served $want - a phone would still see the old one"
+          exit 1
+
+      # Every download the manifest advertises, checked against what the
+      # releases API says is actually there. A size that disagrees means the
+      # manifest is describing a build that has since been replaced, which is
+      # exactly what re-pushing a tag does - and a phone handed the wrong length
+      # fails at install with the same unhelpful message.
+      - name: Check every advertised download against the real asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/${{ github.repository }}/releases --paginate > releases.json
+          node scripts/check-source.mjs altstore.json releases.json
