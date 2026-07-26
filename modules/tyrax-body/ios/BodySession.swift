@@ -146,12 +146,7 @@ final class BodySession {
     let skeleton = anchor.skeleton
     var data = Data(capacity: skeleton.jointLocalTransforms.count * 16)
     for m in skeleton.jointLocalTransforms {
-      let q = simd_quatf(simd_float3x3(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z),
-                                       SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z),
-                                       SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)))
-      for v in [q.imag.x, q.imag.y, q.imag.z, q.real] {
-        withUnsafeBytes(of: v.bitPattern.littleEndian) { data.append(contentsOf: $0) }
-      }
+      appendQuat(&data, rotationOf(m))
     }
     let t = anchor.transform.columns.3
     onFrame(timestamp - streamStart, data.base64EncodedString(), [t.x, t.y, t.z])
@@ -168,12 +163,7 @@ final class BodySession {
       for v in [t.x, t.y, t.z] {
         withUnsafeBytes(of: v.bitPattern.littleEndian) { pos.append(contentsOf: $0) }
       }
-      let q = simd_quatf(simd_float3x3(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z),
-                                       SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z),
-                                       SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)))
-      for v in [q.imag.x, q.imag.y, q.imag.z, q.real] {
-        withUnsafeBytes(of: v.bitPattern.littleEndian) { rot.append(contentsOf: $0) }
-      }
+      appendQuat(&rot, rotationOf(m))
     }
     // The editor expects position then rotation, one run after the other.
     var payload = pos
@@ -246,5 +236,26 @@ private class HeadlessDelegate: NSObject, ARSessionDelegate {
 
   func sessionWasInterrupted(_ session: ARSession) {
     owner.emit(tracking: "interrupted", body: false)
+  }
+}
+
+// A joint's rotation with ARKit's SCALE dropped. Its skeleton-scale estimation
+// puts the performer's real limb lengths in the local transforms, and
+// simd_quatf wants an orthonormal basis - feeding it a scaled one yields a
+// rotation that is quietly wrong. The editor drops scale the same way when it
+// decomposes a recorded take; the two paths have to agree.
+private func rotationOf(_ m: simd_float4x4) -> simd_quatf {
+  func unit(_ c: SIMD4<Float>) -> SIMD3<Float> {
+    let v = SIMD3(c.x, c.y, c.z)
+    let len = simd_length(v)
+    return len > 1e-6 ? v / len : SIMD3(0, 0, 0)
+  }
+  return simd_quatf(simd_float3x3(unit(m.columns.0), unit(m.columns.1), unit(m.columns.2)))
+}
+
+// x, y, z, w - the order the editor reads, little-endian.
+private func appendQuat(_ data: inout Data, _ q: simd_quatf) {
+  for v in [q.imag.x, q.imag.y, q.imag.z, q.real] {
+    withUnsafeBytes(of: v.bitPattern.littleEndian) { data.append(contentsOf: $0) }
   }
 }
