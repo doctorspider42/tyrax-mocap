@@ -48,6 +48,13 @@ jobs:
       - name: Check the Expo config resolves
         run: npx expo config --type public > /dev/null
 
+      # Metro resolves `import { foo } from 'expo'` whether or not expo exports
+      # foo - the name just lands as undefined and throws at the call site, on
+      # the device. When that call is at module scope the app dies on launch and
+      # this job stays green, which is precisely how v1.0.2 shipped broken.
+      - name: Named imports must actually exist
+        run: node scripts/check-imports.mjs
+
       # The local body-tracking module is what makes this app more than a list
       # of files, and autolinking failing to pick it up is INVISIBLE: the app
       # still builds and still runs, it just silently records nothing. Assert it.
