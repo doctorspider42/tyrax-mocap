@@ -25,8 +25,12 @@ public class TyraxBodyModule: Module {
       BodySession.shared.onStatus = { [weak self] payload in
         self?.sendEvent("onStatus", payload)
       }
-      BodySession.shared.onFrame = { [weak self] ts, rot, hips, root in
-        self?.sendEvent("onFrame", ["ts": ts, "rot": rot, "hips": hips, "root": root])
+      BodySession.shared.onFrame = { [weak self] ts, rot, hips, root, extra in
+        var payload: [String: Any] = ["ts": ts, "rot": rot, "hips": hips, "root": root]
+        // Whatever Vision saw rides along verbatim - the module does not know
+        // what any of these keys mean, and does not need to.
+        for (k, v) in extra { payload[k] = v }
+        self?.sendEvent("onFrame", payload)
       }
     }
 
@@ -107,6 +111,15 @@ public class TyraxBodyModule: Module {
     Function("setStreaming") { (on: Bool, hz: Double) in
       BodySession.shared.streamInterval = hz > 0 ? 1.0 / hz : 0
       BodySession.shared.streaming = on
+    }
+
+    // The Vision pass that fills in the head and the wrists. Off costs nothing;
+    // on costs a fraction of the Neural Engine ARKit is already using, which is
+    // why it runs at a twelfth of the body tracker's rate.
+    Function("setVision") { (on: Bool, hz: Double) in
+      BodySession.shared.visionEnabled = on
+      if hz > 0 { BodySession.shared.vision.interval = 1.0 / hz }
+      if !on { BodySession.shared.vision.reset() }
     }
 
     // The live viewfinder. Mounting one attaches it to the session that is

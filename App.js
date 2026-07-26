@@ -140,7 +140,10 @@ export default function App() {
         l.sendSkeleton(sk, base64ToBytes(sk.rest));
         if (!l.sentSkeleton) return;
       }
-      l.sendFrame(f.ts, base64ToBytes(f.rot), f.hips, f.root);
+      // Everything the native event carries that is not the skeleton itself is
+      // a Vision observation, and goes out untouched.
+      const { ts, rot, hips, root, ...vision } = f;
+      l.sendFrame(ts, base64ToBytes(rot), hips, root, vision);
       sentRef.current += 1;
     });
     // The counter is shown, not used, so it is read on a timer rather than set
@@ -166,6 +169,10 @@ export default function App() {
       client: 'TyraX Mocap',
     });
     Body.setStreaming(true, 30);
+    // The head and the wrists, which ARKit reports and never solves. A twelfth
+    // of the body tracker's rate on purpose: the editor smooths between what it
+    // gets, and starving ARKit of the Neural Engine costs more than it buys.
+    Body.setVision(true, 12);
     FileSystem.writeAsStringAsync(LINK_FILE, JSON.stringify({ address, code: pairCode }))
       .catch(() => {});
   }, [address, pairCode]);

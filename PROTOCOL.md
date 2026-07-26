@@ -67,7 +67,7 @@ floats have no business going through it.
 | --- | --- | --- |
 | `hello` | `proto`, `code`, `name`, `model`, `client`, `body: true` | — |
 | `bodyrest` | `joints[]`, `parents[]` | 3 floats position + 4 floats rotation per joint, positions first |
-| `body` | `ts`, optional `h` (hips position, 3 floats) and `r` (heading, 4 floats) | 4 floats rotation per joint |
+| `body` | `ts`, optional `h` (hips position, 3 floats), `r` (heading, 4 floats) and the Vision keys below | 4 floats rotation per joint |
 
 `body: true` at hello is how the editor knows this is the mocap app and not
 tyrax-cam; the two share a server and a port.
@@ -88,6 +88,32 @@ That is ~1.5 KB a frame for 91 joints, a quarter of what the file format costs.
 The native side hands each packed frame to JavaScript as base64 (the bridge
 carries no binary) and JavaScript owns the socket — the same split as tyrax-cam.
 
+### The Vision keys
+
+ARKit does not solve the head or the wrists (see below), so a second pass over
+the same camera frames does. What it sees rides the same `body` message, and
+**none of it is interpreted on the phone**:
+
+| key | meaning |
+| --- | --- |
+| `cq` | the camera's orientation in ARKit world space, 4 floats. Vision reports the face's angles *relative to the camera*, so without this the head is oriented in a frame that moves whenever the operator does |
+| `fa` | the face's yaw, pitch and roll in radians, as `VNFaceObservation` gives them |
+| `ia` | image width / height. Vision normalizes **both** axes to [0, 1] independently, so on a 4:3 capture every vertical distance arrives a third too large - a landmark's direction is not its direction until this is applied |
+| `hl`, `hr` | a hand: confidence, then five landmarks as x, y pairs - wrist, index knuckle, middle knuckle, little knuckle, thumb base. An unsure thumb is sent as `(-1, -1)`, which is off the image and cannot be read as a position |
+
+The landmarks are in **Vision's own frame**: origin bottom-left. The editor
+flips and un-stretches them.
+
+Why the thumb, when the wrist and three knuckles already fix a plane: because a
+plane is exactly what they fix, and a plane's image is identical to its mirror
+image. Four coplanar points cannot tell a palm from the back of a hand. The
+thumb sits off that plane, and it is the only landmark here that does.
+
+`hl` and `hr` are sorted **left to right in the image**, not by Vision's own
+chirality, which is unreliable at the distance a full-body shot needs. Which arm
+a hand belongs to is decided by the editor, which knows where both wrists are in
+three dimensions.
+
 ## What ARKit reports but does not solve
 
 Some joints in a take never move. Over a 277-frame recording, these had **zero**
@@ -100,9 +126,13 @@ variation - not "small", not a float bit:
 
 They are in every take because ARKit's skeleton has them, and a consumer should
 expect them to follow their parent bone rigidly rather than treat the constant
-value as a tracking failure. The editor measures this per take and says so on
-import, for exactly the reason it is written here: on screen, a source with no
-wrist data is indistinguishable from a broken retarget.
+value as a tracking failure - unless the Vision keys above are present, which is
+exactly what they are for: the editor overwrites those frozen joints with what
+Vision saw, before anything else looks at the frame.
+
+The editor also measures this per take and says so on import, for exactly the
+reason it is written here: on screen, a source with no wrist data is
+indistinguishable from a broken retarget.
 
 ## Conventions
 

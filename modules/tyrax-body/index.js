@@ -61,6 +61,12 @@ export function setStreaming(on, hz = 30) {
   if (native) native.setStreaming(!!on, hz);
 }
 
+// The Vision pass that fills in the head and the wrists ARKit reports but never
+// solves. Runs over the same camera frames, at a fraction of the rate.
+export function setVision(on, hz = 12) {
+  if (native && native.setVision) native.setVision(!!on, hz);
+}
+
 // listener({ ts, rot, hips, root }) -> subscription. `rot` is base64 of 4 floats
 // per joint in the skeleton's order; `hips` is the anchor's position and `root`
 // its rotation - the body's heading, which is not in the skeleton at all.

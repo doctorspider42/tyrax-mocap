@@ -32,6 +32,10 @@ final class BodySession {
   var streamInterval: Double = 1.0 / 30.0
   private var lastStreamed: TimeInterval = -1
   private var streamStart: TimeInterval = -1
+  // Vision reports the face's angles RELATIVE TO THE CAMERA, so the camera's
+  // own orientation has to travel with them or the head is oriented in a frame
+  // that moves whenever the operator does.
+  private var lastCameraRotation: simd_quatf?
   private var sawBodyRecently = false
 
   // Set by the module so status can reach JavaScript.
@@ -40,8 +44,13 @@ final class BodySession {
   // packed. JavaScript owns the socket (as in tyrax-cam) but never sees a
   // joint - it forwards an opaque blob, which is what keeps ~1.5 KB a frame
   // off the bridge as anything but base64.
-  var onFrame: ((_ ts: Double, _ rotBase64: String, _ hips: [Float], _ root: [Float]) -> Void)?
+  var onFrame: ((_ ts: Double, _ rotBase64: String, _ hips: [Float], _ root: [Float],
+                 _ extra: [String: Any]) -> Void)?
   var streaming = false
+  // The second opinion on the joints ARKit will not solve. Fed from the same
+  // delegate that feeds the recorder, throttled to a fraction of ARKit's rate.
+  let vision = VisionPass()
+  var visionEnabled = true
 
   // Which of ARKit's supported capture formats to run. -1 = whatever ARKit
   // picks for itself.
@@ -98,6 +107,8 @@ final class BodySession {
     streaming = false
     lastStreamed = -1
     streamStart = -1
+    lastCameraRotation = nil
+    vision.reset()
     session.pause()
     running = false
   }
@@ -134,6 +145,13 @@ final class BodySession {
   func feed(anchor: ARBodyAnchor, timestamp: TimeInterval) {
     sawBodyRecently = true
     recorder?.append(anchor: anchor, timestamp: timestamp)
+    // One place for both delegates. `currentFrame` is read and immediately
+    // reduced to its pixel buffer - holding on to an ARFrame stalls the session,
+    // and the buffer is all Vision wants anyway.
+    if let frame = session.currentFrame {
+      lastCameraRotation = simd_quatf(frame.camera.transform)
+      if visionEnabled && streaming { vision.consider(frame: frame) }
+    }
     guard streaming, let onFrame = onFrame else { return }
     // Rotations only. Bone lengths do not change during a take, so the rest
     // pose the editor already has covers the translations - sending 4 floats a
@@ -156,7 +174,38 @@ final class BodySession {
     let t = anchor.transform.columns.3
     let q = rotationOf(anchor.transform)
     onFrame(timestamp - streamStart, data.base64EncodedString(), [t.x, t.y, t.z],
-            [q.imag.x, q.imag.y, q.imag.z, q.real])
+            [q.imag.x, q.imag.y, q.imag.z, q.real], visionPayload())
+  }
+
+  // What Vision saw, packed for the wire. Nothing is interpreted: the angles
+  // and landmarks go out as reported, plus the camera's orientation and the
+  // image's aspect, because the editor needs both to make sense of the rest and
+  // neither is worth guessing at twice.
+  private func visionPayload() -> [String: Any] {
+    guard visionEnabled else { return [:] }
+    var out: [String: Any] = [:]
+    if let cam = lastCameraRotation {
+      out["cq"] = [cam.imag.x, cam.imag.y, cam.imag.z, cam.real]
+    }
+    let r = vision.latest
+    out["ia"] = r.aspect
+    if r.faceFound { out["fa"] = [r.yaw, r.pitch, r.roll] }
+    func pack(_ h: VisionPass.Hand) -> [Float]? {
+      guard h.found else { return nil }
+      // Confidence, then five landmarks. An unsure thumb goes as (-1, -1),
+      // which is off the image and so cannot be read as a position.
+      let thumbX: Float = h.haveThumb ? Float(h.thumb.x) : -1
+      let thumbY: Float = h.haveThumb ? Float(h.thumb.y) : -1
+      return [h.confidence,
+              Float(h.wrist.x), Float(h.wrist.y),
+              Float(h.indexMcp.x), Float(h.indexMcp.y),
+              Float(h.middleMcp.x), Float(h.middleMcp.y),
+              Float(h.littleMcp.x), Float(h.littleMcp.y),
+              thumbX, thumbY]
+    }
+    if let l = pack(r.left) { out["hl"] = l }
+    if let rr = pack(r.right) { out["hr"] = rr }
+    return out
   }
 
   // The skeleton the editor needs once: names, the tree, and the rest pose

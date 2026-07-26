@@ -77,6 +77,25 @@ two apart by what they send after hello. Rotations only, 30 Hz, ~1.5 KB a frame:
 bone lengths do not change during a take, so the rest pose sent once at connect
 covers everything else.
 
+### Head and hands
+
+ARKit's body tracker reports a head joint and two wrists and **solves none of
+them** - measured over a real take, they did not move by a single float bit in
+277 frames. Hand and face tracking on iOS live in Vision instead, a different
+framework, and it is happy to run over the same camera frames this session
+already produces. So it does, at 12 Hz, and the landmarks go out with each
+streamed frame.
+
+The geometry that turns those landmarks into joint rotations is **in the
+editor**, not here. Two reasons, and both are practical: it can be tested there
+against synthetic data without a device in the loop, and getting a convention
+wrong then costs an edit rather than a build, a tag, an AltStore round trip and
+a reinstall.
+
+What it needs is size in the frame. A face across the room is plenty; a hand at
+four metres is about ninety pixels and the wrist gets noisy. Step closer and the
+hands come alive.
+
 Streaming and recording are independent. Line the shot up live, then press
 **Record** when the take is worth keeping — the file is written on the phone
 exactly as before.

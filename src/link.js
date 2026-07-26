@@ -114,7 +114,11 @@ export class Link {
       this.sentSkeleton = true;
   }
 
-  sendFrame(ts, rotBytes, hips, root) {
+  // `vision` is whatever the native side saw beyond the skeleton - the camera's
+  // orientation, the face's angles, palm landmarks. It is forwarded key for key
+  // without being read here: this end of the link is a pipe, and every one of
+  // those numbers means something only to the editor's solver.
+  sendFrame(ts, rotBytes, hips, root, vision) {
     if (!this.connected || !this.sentSkeleton) return;
     const msg = { t: 'body', ts };
     if (hips) msg.h = hips;
@@ -122,6 +126,7 @@ export class Link {
     // does not contain it - ARKit keeps the whole body orientation on the
     // anchor and leaves the hips joint's own rotation constant.
     if (root) msg.r = root;
+    if (vision) for (const k of Object.keys(vision)) msg[k] = vision[k];
     this.send(msg, rotBytes);
   }
 
