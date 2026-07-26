@@ -3,13 +3,13 @@
     "name": "TyraX Mocap",
     "slug": "tyrax-mocap",
     "icon": "./assets/icon.png",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "io.github.doctorspider42.tyraxmocap",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": true,
       "requireFullScreen": true,
       "infoPlist": {

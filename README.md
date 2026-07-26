@@ -21,12 +21,32 @@ phone into a camera viewfinder. Same build story, same sideload story.
 
 ## Recording
 
+The app is a viewfinder: it shows the camera with the tracked skeleton drawn
+on top, so you can try framings and see whether ARKit has actually found the
+body *before* pressing record rather than after.
+
 1. Stand the phone up (a tripod, a mug, anything) so it can see the performer
    head to foot.
-2. Wait for the status pill to read **normal** and for "body in frame".
+2. Wait for the status pill to read **normal** and for the skeleton to land
+   on them - "body in frame" turns green.
 3. **Record**, perform, **Stop**. The take appears in the list.
 4. **Send** opens the iOS share sheet — AirDrop it to the machine running the
    editor, or drop it in any cloud folder.
+
+The overlay draws the joints **the editor will actually use**, not all 91 ARKit
+reports: fingers and face are noise at this distance, and this way what you see
+on screen is exactly what gets retargeted.
+
+### Choosing a camera
+
+Body tracking is **rear camera only** - the front one does faces, not bodies,
+and ARKit offers no choice about it. What the picker under the viewfinder does
+choose is the capture format, and on a phone with more than one rear lens that
+includes **which lens**: the ultra-wide is the difference between needing three
+metres to fit a whole person in and needing half of that. Higher frame rates
+are there too; the take is resampled on import either way.
+
+Switching restarts tracking, so it is refused during a recording.
 
 Takes are `.tmocap` files, about 5.8 KB per frame (a 10-second take is ~1.7 MB).
 The format is one page: [PROTOCOL.md](PROTOCOL.md).
@@ -95,10 +115,21 @@ Expo (React Native) for the screen, a small **native Expo module** in Swift for
 everything that matters:
 
 ```
-modules/tyrax-body/ios/TyraxBodyModule.swift   ARKit session, take recorder
+modules/tyrax-body/ios/BodySession.swift       the one ARKit session
+modules/tyrax-body/ios/TakeRecorder.swift      the .tmocap writer
+modules/tyrax-body/ios/TyraxBodyPreview.swift  the viewfinder + skeleton overlay
+modules/tyrax-body/ios/TyraxBodyModule.swift   the JS-facing module
 modules/tyrax-body/index.js                    the JS face of it
-App.js                                         one screen: status, record, takes
+App.js                                         one screen: viewfinder, record, takes
 ```
+
+Body anchors reach the recorder two ways and never both at once: headless (the
+module is the session delegate) or through the preview. That split is not
+decoration - `ARSCNView` takes `session.delegate` for itself when a session is
+assigned to it, so fighting it for that slot loses the video feed. The view
+therefore feeds the recorder from its own `ARSCNViewDelegate`, and the headless
+delegate stands down while a view is attached. Either way the take is the same
+file.
 
 The recording is buffered and written **in Swift**, not in JavaScript. A take
 is 91 joints × a 4×4 matrix per frame; pushing that across the JS bridge 30

@@ -1,5 +1,6 @@
-// TyraX Mocap: point the phone at somebody, record, hand the take to the
-// editor. One screen on purpose - the phone is a capture device, not a DAW.
+// TyraX Mocap: point the phone at somebody, watch the skeleton land on them,
+// record, hand the take to the editor. One screen on purpose - the phone is a
+// capture device, not a DAW.
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -19,12 +20,32 @@ function formatBytes(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// "AVCaptureDeviceTypeBuiltInUltraWideCamera" -> "ultra wide". The lens is the
+// only part of a format that changes how you have to stand, so it leads.
+function lensName(raw) {
+  if (!raw) return '';
+  const m = /BuiltIn(\w+?)Camera$/.exec(raw);
+  if (!m) return '';
+  return m[1]
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/Dual Wide/i, 'dual wide')
+    .toLowerCase();
+}
+
+function formatLabel(f) {
+  const lens = lensName(f.lens);
+  return `${lens ? lens + ' · ' : ''}${f.width}×${f.height} · ${f.fps} fps`;
+}
+
 export default function App() {
   const [supported] = useState(() => Body.available && Body.isSupported());
   const [status, setStatus] = useState({ tracking: 'idle', body: false, frames: 0, elapsed: 0 });
   const [recording, setRecording] = useState(false);
   const [takes, setTakes] = useState([]);
   const [note, setNote] = useState('');
+  const [formats, setFormats] = useState([]);
+  const [formatIndex, setFormatIndex] = useState(-1);
+  const [showFormats, setShowFormats] = useState(false);
   const counter = useRef(1);
 
   const refreshTakes = useCallback(async () => {
@@ -51,12 +72,25 @@ export default function App() {
     if (!supported) return;
     const sub = Body.addStatusListener(setStatus);
     Body.start();
+    setFormats(Body.videoFormats());
     refreshTakes();
     return () => {
       sub.remove();
       Body.stop();
     };
   }, [supported, refreshTakes]);
+
+  const pickFormat = useCallback((index) => {
+    // Switching restarts tracking, so refuse mid-take rather than splicing a
+    // discontinuity into the recording.
+    if (recording) {
+      setNote('Stop the recording before changing the lens.');
+      return;
+    }
+    Body.setVideoFormat(index);
+    setFormatIndex(index);
+    setShowFormats(false);
+  }, [recording]);
 
   const toggleRecord = useCallback(async () => {
     if (!recording) {
@@ -131,6 +165,8 @@ export default function App() {
   }
 
   const trackingOk = status.tracking === 'normal';
+  const current = formats.find((f) => f.index === formatIndex);
+  const Preview = Body.BodyPreview;
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="light" />
@@ -142,19 +178,48 @@ export default function App() {
       </View>
 
       <View style={styles.stage}>
-        <Text style={[styles.bodyState, status.body ? styles.ok : styles.warn]}>
-          {status.body ? 'body in frame' : 'no body in frame'}
-        </Text>
-        {recording ? (
-          <Text style={styles.counterText}>
-            {status.frames} frames · {Number(status.elapsed || 0).toFixed(1)} s
+        {Preview ? <Preview style={StyleSheet.absoluteFill} /> : null}
+        <View style={styles.overlay} pointerEvents="none">
+          <Text style={[styles.bodyState, status.body ? styles.ok : styles.warn]}>
+            {status.body ? 'body in frame' : 'no body in frame'}
           </Text>
-        ) : (
-          <Text style={styles.hint}>
-            Stand the phone up, get the WHOLE body in frame, then record.
-          </Text>
-        )}
+          {recording ? (
+            <Text style={styles.counterText}>
+              {status.frames} frames · {Number(status.elapsed || 0).toFixed(1)} s
+            </Text>
+          ) : (
+            <Text style={styles.hint}>Get the WHOLE body in frame.</Text>
+          )}
+        </View>
       </View>
+
+      {/* Lens picker. Body tracking is rear-camera only - ARKit has no front
+          option - so what this really chooses is which rear lens and at what
+          rate, and the wide one is how you film in a small room. */}
+      {formats.length > 1 && (
+        <Pressable onPress={() => setShowFormats((s) => !s)} style={styles.formatBar}>
+          <Text style={styles.formatLabel}>
+            {current ? formatLabel(current) : 'Camera: ARKit default'}
+          </Text>
+          <Text style={styles.formatChevron}>{showFormats ? '▲' : '▼'}</Text>
+        </Pressable>
+      )}
+      {showFormats && (
+        <View style={styles.formatList}>
+          <Pressable onPress={() => pickFormat(-1)} style={styles.formatRow}>
+            <Text style={[styles.formatRowText, formatIndex === -1 && styles.formatRowOn]}>
+              ARKit default
+            </Text>
+          </Pressable>
+          {formats.map((f) => (
+            <Pressable key={f.index} onPress={() => pickFormat(f.index)} style={styles.formatRow}>
+              <Text style={[styles.formatRowText, formatIndex === f.index && styles.formatRowOn]}>
+                {formatLabel(f)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       <Pressable
         onPress={toggleRecord}
@@ -168,7 +233,7 @@ export default function App() {
 
       {!!note && <Text style={styles.note}>{note}</Text>}
 
-      <Text style={styles.section}>Takes</Text>
+      <Text style={styles.section}>TAKES</Text>
       <FlatList
         style={styles.list}
         data={takes}
@@ -201,22 +266,31 @@ const styles = StyleSheet.create({
   pill: { overflow: 'hidden', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, fontSize: 12 },
   pillOk: { backgroundColor: '#1d3b26', color: '#7fe0a0' },
   pillWarn: { backgroundColor: '#3b331d', color: '#e8cf7f' },
-  stage: { paddingVertical: 26, alignItems: 'center' },
-  bodyState: { fontSize: 17, fontWeight: '600' },
+  // The viewfinder gets the room: framing a whole person is the hard part.
+  stage: { flex: 1, marginTop: 10, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000' },
+  overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, alignItems: 'center' },
+  bodyState: { fontSize: 15, fontWeight: '600', textShadowColor: '#000', textShadowRadius: 6 },
   ok: { color: '#7fe0a0' },
   warn: { color: '#e8cf7f' },
-  counterText: { color: '#f2f4f8', fontSize: 30, fontVariant: ['tabular-nums'], marginTop: 10 },
-  hint: { color: '#8b93a1', fontSize: 13, marginTop: 10, textAlign: 'center' },
+  counterText: { color: '#fff', fontSize: 26, fontVariant: ['tabular-nums'], textShadowColor: '#000', textShadowRadius: 6 },
+  hint: { color: '#c8ced8', fontSize: 13, marginTop: 4, textAlign: 'center', textShadowColor: '#000', textShadowRadius: 6 },
   body: { color: '#c3c9d4', fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  record: { borderRadius: 16, paddingVertical: 18, alignItems: 'center' },
+  formatBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  formatLabel: { color: '#9fb4cc', fontSize: 13 },
+  formatChevron: { color: '#6f7787', fontSize: 11 },
+  formatList: { backgroundColor: '#171a21', borderRadius: 10, marginBottom: 8, paddingVertical: 4 },
+  formatRow: { paddingVertical: 9, paddingHorizontal: 12 },
+  formatRowText: { color: '#c3c9d4', fontSize: 13 },
+  formatRowOn: { color: '#7fb2e0', fontWeight: '700' },
+  record: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
   recordOff: { backgroundColor: '#2b6cb0' },
   recordOn: { backgroundColor: '#b03a2b' },
   pressed: { opacity: 0.75 },
   recordLabel: { color: '#fff', fontSize: 19, fontWeight: '700' },
-  note: { color: '#9fb4cc', fontSize: 12, marginTop: 12 },
-  section: { color: '#8b93a1', fontSize: 12, letterSpacing: 1, marginTop: 22, marginBottom: 6 },
-  list: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1c2029' },
+  note: { color: '#9fb4cc', fontSize: 12, marginTop: 10 },
+  section: { color: '#8b93a1', fontSize: 11, letterSpacing: 1, marginTop: 16, marginBottom: 4 },
+  list: { maxHeight: 170 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#1c2029' },
   rowText: { flex: 1 },
   rowName: { color: '#e6eaf2', fontSize: 14 },
   rowMeta: { color: '#6f7787', fontSize: 12 },

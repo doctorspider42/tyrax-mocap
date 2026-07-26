@@ -3,7 +3,7 @@
 // user what it cannot do rather than crashing on import.
 // Imported from `expo` rather than `expo-modules-core`: SDK 51+ re-exports it,
 // so the app needs no direct dependency on the core package.
-import { requireOptionalNativeModule } from 'expo';
+import { requireNativeViewManager, requireOptionalNativeModule } from 'expo';
 
 const native = requireOptionalNativeModule('TyraxBody');
 
@@ -42,3 +42,21 @@ export function isRecording() {
 export function addStatusListener(listener) {
   return native ? native.addListener('onStatus', listener) : { remove() {} };
 }
+
+// The capture formats ARKit accepts for body tracking:
+// [{ index, width, height, fps, lens, selected }]. There is no front/rear
+// choice - body tracking is rear-camera only - but on a phone with several
+// rear lenses this is where the wide one appears, which decides how far back
+// the performer has to stand.
+export function videoFormats() {
+  return native ? native.videoFormats() : [];
+}
+
+// Restarts tracking on that format; -1 gives the choice back to ARKit.
+export function setVideoFormat(index) {
+  if (native) native.setVideoFormat(index);
+}
+
+// The live viewfinder: the camera with the tracked skeleton drawn over it.
+// Null when the native module is absent, so the app can render around it.
+export const BodyPreview = native ? requireNativeViewManager('TyraxBody') : null;
