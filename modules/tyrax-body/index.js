@@ -3,7 +3,12 @@
 // user what it cannot do rather than crashing on import.
 // Imported from `expo` rather than `expo-modules-core`: SDK 51+ re-exports it,
 // so the app needs no direct dependency on the core package.
-import { requireNativeViewManager, requireOptionalNativeModule } from 'expo';
+import { requireOptionalNativeModule } from 'expo';
+// requireNativeViewManager comes from expo-modules-core, which `expo` does NOT
+// re-export - importing it from `expo` yields undefined and the call below
+// then throws while this module is still loading, which reads as a crash on
+// launch. (It is always installed: `expo` depends on it.)
+import { requireNativeViewManager } from 'expo-modules-core';
 
 const native = requireOptionalNativeModule('TyraxBody');
 
@@ -58,5 +63,20 @@ export function setVideoFormat(index) {
 }
 
 // The live viewfinder: the camera with the tracked skeleton drawn over it.
-// Null when the native module is absent, so the app can render around it.
-export const BodyPreview = native ? requireNativeViewManager('TyraxBody') : null;
+//
+// Resolved defensively. This runs at import time, so anything thrown here takes
+// the whole app down before it draws a pixel - and a missing viewfinder is not
+// worth an app that will not start, when recording works without one. If it
+// fails, `previewError` says why and the UI shows it.
+export let previewError = '';
+export const BodyPreview = (() => {
+  if (!native) return null;
+  try {
+    const view = requireNativeViewManager('TyraxBody');
+    if (!view) previewError = 'the native view is not registered';
+    return view || null;
+  } catch (e) {
+    previewError = String(e?.message || e);
+    return null;
+  }
+})();

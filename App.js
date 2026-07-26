@@ -178,7 +178,19 @@ export default function App() {
       </View>
 
       <View style={styles.stage}>
-        {Preview ? <Preview style={StyleSheet.absoluteFill} /> : null}
+        {Preview ? (
+          <Preview style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={styles.noPreview}>
+            <Text style={styles.body}>
+              No viewfinder on this build
+              {Body.previewError ? `: ${Body.previewError}` : ''}.
+            </Text>
+            <Text style={styles.hint}>
+              Recording still works - aim by eye and watch the status below.
+            </Text>
+          </View>
+        )}
         <View style={styles.overlay} pointerEvents="none">
           <Text style={[styles.bodyState, status.body ? styles.ok : styles.warn]}>
             {status.body ? 'body in frame' : 'no body in frame'}
@@ -268,6 +280,7 @@ const styles = StyleSheet.create({
   pillWarn: { backgroundColor: '#3b331d', color: '#e8cf7f' },
   // The viewfinder gets the room: framing a whole person is the hard part.
   stage: { flex: 1, marginTop: 10, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000' },
+  noPreview: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, alignItems: 'center' },
   bodyState: { fontSize: 15, fontWeight: '600', textShadowColor: '#000', textShadowRadius: 6 },
   ok: { color: '#7fe0a0' },
