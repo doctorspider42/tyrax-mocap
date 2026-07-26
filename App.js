@@ -4,8 +4,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text,
-  TextInput, View,
+  Alert, FlatList, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform,
+  Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -16,6 +16,9 @@ import { Link } from './src/link';
 import { base64ToBytes } from './src/protocol';
 
 const TAKES_DIR = FileSystem.documentDirectory + 'takes/';
+// A number pad has no Return key, so a numeric field has nothing to dismiss it
+// with - the accessory bar above the keyboard is the only way off it.
+const KEYBOARD_DONE = 'linkKeyboardDone';
 // Typing an IP on a phone once is fine; typing it every session is not.
 const LINK_FILE = FileSystem.documentDirectory + 'link.json';
 
@@ -56,6 +59,7 @@ export default function App() {
   const [linkState, setLinkState] = useState('idle');
   const [linkError, setLinkError] = useState('');
   const [sent, setSent] = useState(0);
+  const [typing, setTyping] = useState(false);
   const counter = useRef(1);
   const sentRef = useRef(0);
   const link = useRef(null);
@@ -99,6 +103,18 @@ export default function App() {
       Body.stop();
     };
   }, [supported, refreshTakes]);
+
+  // With a keyboard up there is about 500 points of screen left, and the takes
+  // list alone wants 200 of them - enough to push the row being typed into back
+  // under the keyboard. It is not what you are looking at while typing an IP.
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', () => setTyping(true));
+    const hide = Keyboard.addListener('keyboardWillHide', () => setTyping(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   // The pump: every frame the native side packs goes straight out. The skeleton
   // leads - the editor throws away frames that arrive before it, since there is
@@ -242,6 +258,12 @@ export default function App() {
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="light" />
+      {/* Without this the keyboard covers the very row it was opened for: the
+          link fields sit low on purpose (the viewfinder is what you look at),
+          which is exactly where a keyboard lands. */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <Text style={styles.title}>TyraX Mocap</Text>
         <Text style={[styles.pill, trackingOk ? styles.pillOk : styles.pillWarn]}>
@@ -333,6 +355,9 @@ export default function App() {
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="numbers-and-punctuation"
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+          inputAccessoryViewID={KEYBOARD_DONE}
           editable={linkState !== 'connected'}
         />
         <TextInput
@@ -343,6 +368,7 @@ export default function App() {
           placeholderTextColor="#5b6373"
           keyboardType="number-pad"
           maxLength={6}
+          inputAccessoryViewID={KEYBOARD_DONE}
           editable={linkState !== 'connected'}
         />
         <Pressable
@@ -365,8 +391,8 @@ export default function App() {
             : 'The editor shows its address and code in Tools ▸ Phone Camera.'}
       </Text>
 
-      <Text style={styles.section}>TAKES</Text>
-      <FlatList
+      {!typing && <Text style={styles.section}>TAKES</Text>}
+      {!typing && <FlatList
         style={styles.list}
         data={takes}
         keyExtractor={(t) => t.name}
@@ -385,7 +411,15 @@ export default function App() {
             </Pressable>
           </View>
         )}
-      />
+      />}
+      </KeyboardAvoidingView>
+      <InputAccessoryView nativeID={KEYBOARD_DONE}>
+        <View style={styles.accessory}>
+          <Pressable onPress={Keyboard.dismiss} hitSlop={12}>
+            <Text style={styles.accessoryDone}>Done</Text>
+          </Pressable>
+        </View>
+      </InputAccessoryView>
     </SafeAreaView>
   );
 }
@@ -421,6 +455,12 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75 },
   recordLabel: { color: '#fff', fontSize: 19, fontWeight: '700' },
   note: { color: '#9fb4cc', fontSize: 12, marginTop: 10 },
+  flex: { flex: 1 },
+  accessory: {
+    backgroundColor: '#20242d', borderTopWidth: 1, borderTopColor: '#2c313c',
+    alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 9,
+  },
+  accessoryDone: { color: '#7fb2e0', fontSize: 16, fontWeight: '700' },
   linkRow: { flexDirection: 'row', alignItems: 'center' },
   input: {
     backgroundColor: '#171a21', borderRadius: 8, color: '#e6eaf2', fontSize: 14,
